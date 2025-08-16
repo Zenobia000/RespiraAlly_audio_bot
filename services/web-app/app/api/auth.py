@@ -244,7 +244,7 @@ def serve_liff_page():
 @auth_bp.route('/cat_form', methods=['GET'])
 @swag_from({
     'summary': '提供 CAT 問卷頁面',
-    'description': '提供 LINE Front-end Framework (LIFF) 的CAT、ＭＭＲＣ問卷頁面。',
+    'description': '提供 LINE Front-end Framework (LIFF) 的CAT、MMRC問卷頁面。',
     'tags': ['CAT', 'MMRC'],
     'responses': {
         '200': {
