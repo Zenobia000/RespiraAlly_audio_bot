@@ -121,8 +121,10 @@ def handle_user_message(
             # 只保留攔截與否
         is_block = guard_res.startswith("BLOCK:")
         block_reason = guard_res[6:].strip() if is_block else ""
-        
-        print(f"🛡️ Guardrail 檢查結果: {'BLOCK' if is_block else 'OK'} - 查詢: '{full_text[:50]}...'")
+
+        print(
+            f"🛡️ Guardrail 檢查結果: {'BLOCK' if is_block else 'OK'} - 查詢: '{full_text[:50]}...'"
+        )
         if is_block:
             print(f"🚫 攔截原因: {block_reason}")
 
@@ -141,17 +143,19 @@ def handle_user_message(
                 description=(
                     f"{ctx}\n\n使用者輸入：{full_text}\n"
                     "請以『國民孫女』口吻回覆，遵守【回覆風格規則】：禁止列點、不要用數字或符號開頭、避免學術式摘要；台語混中文、自然聊天感。"
+                    "你必須先在句首添加一個你判斷最合適的情緒標籤（只能是 <關心>、<開心>、<擔心> 其一），"
+                    "標籤之後接一句自然回覆。僅限制回覆正文長度≤30字（標籤不計入字數）。"
                     + (
-                        "\n【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（例如違法、成人內容、醫療/用藥/劑量/診斷等具體指示）。"
-                        "請直接婉拒，**不要**提供任何具體方案、診斷或劑量，也**不要**硬給替代作法。"
-                        "僅可給一般層級的安全提醒（如：鼓勵諮詢合格醫師/藥師）與情緒安撫的一兩句話。"
+                        "\n【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（違法/成人內容/用藥劑量/診斷/處置等具體指示）。"
+                        "請溫柔婉拒且不可提供具體方案；仍需依規則在句首添加情緒標籤。"
                         if is_block
-                        else "\n【正常回覆】若內容屬一般衛教/日常關懷，簡短回應並可給 1–2 個小步驟建議。"
+                        else "\n【正常回覆】若屬一般衛教/日常關懷，簡短回應，可給 1–2 個小步驟建議（仍須符合字數上限）。"
                     )
                 ),
-                expected_output="台語風格的溫暖關懷回覆，必要時使用工具。",
+                expected_output="格式：<關心|開心|擔心>後接台語風格一句話。僅正文≤30字，標籤不計入。",
                 agent=care,
             )
+
             res = Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or ""
         except Exception:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
