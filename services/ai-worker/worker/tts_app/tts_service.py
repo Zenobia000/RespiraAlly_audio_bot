@@ -20,6 +20,7 @@ from mutagen import File
 from opencc import OpenCC
 from snac import SNAC
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from pydub import AudioSegment
 
 # --- Hugging Face CLI 登入 ---
 # 在 Docker 環境中，.env 的變數由 docker-compose 的 env_file 直接注入，
@@ -259,7 +260,7 @@ class TTSService:
 
     def synthesize_text(self, text: str) -> Tuple[str, int]:
         """
-        使用 Orpheus TTS 引擎合成文字為音訊檔案，上傳到 MinIO，
+        使用 Orpheus TTS 引擎合成文字為音訊檔案，轉換為 .m4a 格式，上傳到 MinIO，
         並返回物件名稱和音訊長度。
         語音和速度在內部固定。
         """
@@ -268,12 +269,13 @@ class TTSService:
         voice = self.default_voice
 
         temp_audio_file = None
+        temp_m4a_file = None  # <<-- 修改處 2: 為 m4a 檔案預留變數
         try:
-            # 1. 建立一個臨時檔案來儲存合成的音訊
+            # 1. 建立一個臨時檔案來儲存合成的音訊 (WAV)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                 temp_audio_file = tmp.name
 
-            # 2. 合成音訊並儲存到臨時檔案
+            # 2. 合成音訊並儲存到臨時 WAV 檔案
             self.tts_engine.synthesize(
                 prompt=text,
                 voice=voice,
@@ -281,40 +283,48 @@ class TTSService:
                 speed_rate=speed_rate,
             )
 
-            # 3. 獲取音訊元數據並準備上傳
+            # 3. 獲取音訊元數據 (從原始 WAV 檔案)
             if (
                 not os.path.exists(temp_audio_file)
                 or os.path.getsize(temp_audio_file) == 0
             ):
                 raise ValueError("TTS 引擎未能產出有效的音訊檔案。")
 
-            audio_data_len = os.path.getsize(temp_audio_file)
-
             metadata = {}
             duration_ms = 0
             try:
-                # audio_file_info = File(temp_audio_file)
-                # if audio_file_info and audio_file_info.info:
-                #     duration_ms = int(audio_file_info.info.length * 1000)
                 with sf.SoundFile(temp_audio_file) as f:
                     duration_ms = int(len(f) / f.samplerate * 1000)
                     metadata["duration-ms"] = str(duration_ms)
             except Exception as e:
-                print(f"無法使用 mutagen 讀取音訊元數據: {e}", flush=True)
+                print(f"無法讀取音訊元數據: {e}", flush=True)
 
-            # 4. 上傳到 MinIO
+            # <<-- 修改處 3: 新增 WAV 到 M4A 的轉換步驟 -->>
+            print(f"開始將 {temp_audio_file} 轉換為 M4A 格式...", flush=True)
+            temp_m4a_file = temp_audio_file.replace(".wav", ".m4a")
+            # 從 WAV 載入音訊
+            audio = AudioSegment.from_wav(temp_audio_file)
+            # 匯出為 M4A 格式 (AAC 編碼)
+            audio.export(temp_m4a_file, format="mp4", codec="aac")
+            print(f"成功轉換檔案至: {temp_m4a_file}", flush=True)
+            # <<------------------------------------>>
+
+            # 4. 準備上傳 M4A 檔案
             object_name = f"{uuid.uuid4()}.m4a"
+            audio_data_len = os.path.getsize(temp_m4a_file) # <<-- 修改處 4: 取得 m4a 的檔案大小
+
             print(
                 f"Uploading {object_name} to bucket {self.bucket_name}...", flush=True
             )
 
-            with open(temp_audio_file, "rb") as audio_file_data:
+            # 使用轉換後的 M4A 檔案進行上傳
+            with open(temp_m4a_file, "rb") as audio_file_data: # <<-- 修改處 5: 開啟 m4a 檔案
                 self.minio_client.put_object(
                     self.bucket_name,
                     object_name,
                     audio_file_data,
                     length=audio_data_len,
-                    content_type="audio/m4a",
+                    content_type="audio/m4a", # content_type 現在與檔案內容一致
                     metadata=metadata,
                 )
 
@@ -325,11 +335,14 @@ class TTSService:
             print(f"在 TTS 合成或上傳過程中發生錯誤: {e}", flush=True)
             raise
         finally:
-            # 5. 清理臨時檔案
+            # 5. 清理所有臨時檔案
             if temp_audio_file and os.path.exists(temp_audio_file):
                 os.remove(temp_audio_file)
-                print(f"已刪除臨時檔案: {temp_audio_file}", flush=True)
+                print(f"已刪除臨時 WAV 檔案: {temp_audio_file}", flush=True)
 
+            if temp_m4a_file and os.path.exists(temp_m4a_file):
+                os.remove(temp_m4a_file)
+                print(f"已刪除臨時 M4A 檔案: {temp_m4a_file}", flush=True)
 
 # --- 單例實例與工廠模式 ---
 _tts_service_instance: Optional[TTSService] = None
