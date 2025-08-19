@@ -42,3 +42,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+0_discovery
+1_design
+2_implementation
+3_validation
+4_deployment
+design_templates
+seed_csv_output/
