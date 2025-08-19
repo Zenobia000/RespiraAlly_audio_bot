@@ -18,9 +18,9 @@ from minio import Minio
 from minio.error import S3Error
 from mutagen import File
 from opencc import OpenCC
+from pydub import AudioSegment
 from snac import SNAC
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from pydub import AudioSegment
 
 # --- Hugging Face CLI 登入 ---
 # 在 Docker 環境中，.env 的變數由 docker-compose 的 env_file 直接注入，
@@ -196,8 +196,8 @@ class OptimizedOrpheusTTS:
                 attention_mask=attention_mask,
                 max_new_tokens=1200,
                 do_sample=True,
-                temperature=0.4,
-                top_p=0.65,
+                temperature=0.33,
+                top_p=0.43,
                 repetition_penalty=1.5,
                 eos_token_id=128258,
             )
@@ -311,20 +311,24 @@ class TTSService:
 
             # 4. 準備上傳 M4A 檔案
             object_name = f"{uuid.uuid4()}.m4a"
-            audio_data_len = os.path.getsize(temp_m4a_file) # <<-- 修改處 4: 取得 m4a 的檔案大小
+            audio_data_len = os.path.getsize(
+                temp_m4a_file
+            )  # <<-- 修改處 4: 取得 m4a 的檔案大小
 
             print(
                 f"Uploading {object_name} to bucket {self.bucket_name}...", flush=True
             )
 
             # 使用轉換後的 M4A 檔案進行上傳
-            with open(temp_m4a_file, "rb") as audio_file_data: # <<-- 修改處 5: 開啟 m4a 檔案
+            with open(
+                temp_m4a_file, "rb"
+            ) as audio_file_data:  # <<-- 修改處 5: 開啟 m4a 檔案
                 self.minio_client.put_object(
                     self.bucket_name,
                     object_name,
                     audio_file_data,
                     length=audio_data_len,
-                    content_type="audio/m4a", # content_type 現在與檔案內容一致
+                    content_type="audio/m4a",  # content_type 現在與檔案內容一致
                     metadata=metadata,
                 )
 
@@ -343,6 +347,7 @@ class TTSService:
             if temp_m4a_file and os.path.exists(temp_m4a_file):
                 os.remove(temp_m4a_file)
                 print(f"已刪除臨時 M4A 檔案: {temp_m4a_file}", flush=True)
+
 
 # --- 單例實例與工廠模式 ---
 _tts_service_instance: Optional[TTSService] = None
@@ -371,7 +376,9 @@ if __name__ == "__main__":
     try:
         tts_service = get_tts_service()
 
-        test_text = "大家好，這是一個測試，看看整合後的文字轉語音服務是否正常運作。"
+        test_text = (
+            "<擔心>母湯喔～阿公，太熱或太冷的天氣先不要出去啦！在室內動一動就好～"
+        )
         print(f"正在合成測試文字: '{test_text}'")
 
         object_name, duration_ms = tts_service.synthesize_text(test_text)
