@@ -5,6 +5,16 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import App from "./App";
 import "./styles/index.css";
 
+// 🧹 開發模式下清理 LIFF 緩存
+if (import.meta.env.DEV) {
+  // 清理任何舊的 LIFF SDK 引用
+  if (typeof window !== "undefined" && window.liff) {
+    console.log("🧹 清理舊的 LIFF SDK 引用");
+    delete window.liff;
+    window.liff = null;
+  }
+}
+
 // 建立 QueryClient 實例
 const queryClient = new QueryClient({
   defaultOptions: {
