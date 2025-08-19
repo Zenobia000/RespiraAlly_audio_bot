@@ -26,3 +26,4 @@ opencc
 huggingface_hub
 dotenv
 bitsandbytes
+pydub
