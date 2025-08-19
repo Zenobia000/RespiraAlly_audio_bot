@@ -30,7 +30,7 @@ class SearchMilvusTool(BaseTool):
                 _collection = Collection("copd_qa")
                 _collection.load()
                 _milvus_loaded = True
-            thr = float(os.getenv("SIMILARITY_THRESHOLD", 0.6))
+            thr = float(os.getenv("SIMILARITY_THRESHOLD", 0.7))
             vec = to_vector(query)
             if not isinstance(vec, list):
                 vec = vec.tolist() if hasattr(vec, "tolist") else list(vec)

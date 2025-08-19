@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
-import os, json, time, hashlib
-import redis
+import hashlib
+import json
+import os
+import time
 from functools import lru_cache
-from typing import List, Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple
+
+import redis
 
 REDIS_TTL_SECONDS = int(os.getenv("REDIS_TTL_SECONDS", 86400))
 ALERT_STREAM_KEY = os.getenv("ALERT_STREAM_KEY", "alerts:stream")
@@ -50,13 +54,15 @@ def append_round(user_id: str, round_obj: Dict) -> None:
     key = f"session:{user_id}:history"
     r.rpush(key, json.dumps(round_obj, ensure_ascii=False))
     ensure_active_state(user_id)
-    _touch_ttl([
-        key,
-        f"session:{user_id}:summary:text",
-        f"session:{user_id}:summary:rounds",
-        f"session:{user_id}:alerts",
-        f"session:{user_id}:state",
-    ])
+    _touch_ttl(
+        [
+            key,
+            f"session:{user_id}:summary:text",
+            f"session:{user_id}:summary:rounds",
+            f"session:{user_id}:alerts",
+            f"session:{user_id}:state",
+        ]
+    )
 
 
 def history_len(user_id: str) -> int:
@@ -103,7 +109,9 @@ def peek_remaining(user_id: str) -> Tuple[int, List[Dict]]:
     return cursor, [json.loads(x) for x in items]
 
 
-def commit_summary_chunk(user_id: str, expected_cursor: int, advance: int, add_text: str) -> bool:
+def commit_summary_chunk(
+    user_id: str, expected_cursor: int, advance: int, add_text: str
+) -> bool:
     r = get_redis()
     ckey = f"session:{user_id}:summary:rounds"
     tkey = f"session:{user_id}:summary:text"
@@ -116,7 +124,11 @@ def commit_summary_chunk(user_id: str, expected_cursor: int, advance: int, add_t
                     p.unwatch()
                     return False
                 old = p.get(tkey) or ""
-                new = (old + ("\n\n" if old else "") + (add_text or "").strip()) if add_text else old
+                new = (
+                    (old + ("\n\n" if old else "") + (add_text or "").strip())
+                    if add_text
+                    else old
+                )
                 p.multi()
                 p.set(tkey, new)
                 p.set(ckey, cur + int(advance))
@@ -130,16 +142,25 @@ def commit_summary_chunk(user_id: str, expected_cursor: int, advance: int, add_t
 def ensure_alert_group() -> None:
     r = get_redis()
     try:
-        r.xgroup_create(name=ALERT_STREAM_KEY, groupname=ALERT_STREAM_GROUP, id='$', mkstream=True)
+        r.xgroup_create(
+            name=ALERT_STREAM_KEY, groupname=ALERT_STREAM_GROUP, id="$", mkstream=True
+        )
     except redis.ResponseError as e:
-        if 'BUSYGROUP' not in str(e):
+        if "BUSYGROUP" not in str(e):
             raise
 
 
-def xadd_alert(user_id: str, reason: str, severity: str = "info", extra: Optional[Dict] = None) -> str:
+def xadd_alert(
+    user_id: str, reason: str, severity: str = "info", extra: Optional[Dict] = None
+) -> str:
     ensure_alert_group()
     r = get_redis()
-    fields = {"user_id": user_id, "reason": reason, "severity": severity, "ts": str(int(time.time() * 1000))}
+    fields = {
+        "user_id": user_id,
+        "reason": reason,
+        "severity": severity,
+        "ts": str(int(time.time() * 1000)),
+    }
     if extra:
         fields["extra"] = json.dumps(extra, ensure_ascii=False)
     xid = r.xadd(ALERT_STREAM_KEY, fields)
@@ -205,7 +226,9 @@ def set_state_if(user_id: str, expect: str, to: str) -> bool:
         return False
 
 
-def append_audio_segment(user_id: str, audio_id: str, seg: str, ttl_sec: int = 3600) -> None:
+def append_audio_segment(
+    user_id: str, audio_id: str, seg: str, ttl_sec: int = 3600
+) -> None:
     r = get_redis()
     key = f"audio:{user_id}:{audio_id}:buf"
     r.rpush(key, seg)
@@ -220,7 +243,9 @@ def read_and_clear_audio_segments(user_id: str, audio_id: str) -> str:
         p.delete(key)
         parts, _ = p.execute()
     try:
-        parts = [x if isinstance(x, str) else x.decode("utf-8", "ignore") for x in parts]
+        parts = [
+            x if isinstance(x, str) else x.decode("utf-8", "ignore") for x in parts
+        ]
     except Exception:
         parts = []
     return " ".join([p.strip() for p in parts if p])
@@ -230,7 +255,9 @@ def get_audio_result(user_id: str, audio_id: str) -> Optional[str]:
     return get_redis().get(f"audio:{user_id}:{audio_id}:result")
 
 
-def set_audio_result(user_id: str, audio_id: str, reply: str, ttl_sec: int = 86400) -> None:
+def set_audio_result(
+    user_id: str, audio_id: str, reply: str, ttl_sec: int = 86400
+) -> None:
     get_redis().set(f"audio:{user_id}:{audio_id}:result", reply, ex=ttl_sec)
 
 
@@ -256,4 +283,3 @@ def release_audio_lock(lock_id: str) -> None:
         r.delete(key)
     except Exception:
         pass
-
