@@ -1,0 +1,234 @@
+# RespiraAlly — MCP Prompt 規格（Markdown 版）
+
+> 目的：把三份文件（arch / design / api）的**技術棧、UI/UX 原則、API 串接方法、設計模式、資訊流與依賴關係**，整理成**可直接複製進 Cursor 的規範與模組化 Prompts**。  
+> 用法：整份文件可貼入知識庫或作為專案規範；其中「🧩 模組化 Prompts」的 **JSON 區塊**可直接放進 `.cursorule` 或在 Cursor Agent 中逐段執行。
+
+---
+
+## 目錄
+
+1. [技術棧（Tech Stack）](#技術棧tech-stack)
+2. [前端設計原則（含 UI/UX）](#前端設計原則含-uiux)
+3. [資訊流與依賴關係（Data Flow &amp; Dependencies）](#資訊流與依賴關係data-flow--dependencies)
+4. [API 串接方法](#api-串接方法)
+5. [設計模式（前端）](#設計模式前端)
+6. [🧩 模組化 Prompts（可貼入 .cursorule 的 JSON）](#-模組化-prompts可貼入-cursorule-的-json)
+   - 6.1 ChartCard 元件模板
+   - 6.2 OverviewDashboard 整頁
+   - 6.3 health_metrics 的 useEffect + Redux 管理樣板
+   - 6.4 ButtonFactory（.cursorule 自動化套件生成器）
+   - 6.5（選配）Redux `store` 與共用 `hooks`、`api` 服務
+7. [在 Cursor 使用方式與建議 Prompt](#在-cursor-使用方式與建議-prompt)
+
+---
+
+## 技術棧（Tech Stack）
+
+- **前端**：React 18 + Vite、TypeScript、Tailwind CSS（可疊 MUI/AntD 視需求）、react-chartjs-2（Chart.js）
+- **狀態**：Redux Toolkit（RTK）+ `createAsyncThunk` 進行 API 請求
+- **路由**：React Router
+- **時間/工具**：dayjs、classnames
+- **後端（已存在）**：Flask（API docs：`http://localhost:5000/apidocs/#/`）
+- **API Base URL**：以 `.env` 控制 `VITE_API_BASE_URL`（預設 `http://localhost:5000`）
+
+---
+
+## 前端設計原則（含 UI/UX）
+
+- **對象**：呼吸治療師與中高齡 COPD 病患
+- **可讀性**：大字體、高對比、清晰間距；WCAG 2.1 AA
+- **資訊階層**：Dashboard → Page（Overview / Cases / Tasks …）→ Card（KPI/Chart）→ 控件（Button/Input/Tag）
+- **互動**：所有 API 讀取有 Loading Skeleton / Error Boundary；圖表帶 Tooltip、Legend、Empty State
+- **設計 Tokens**（例）：
+  - `font.family`: `"Noto Sans TC", system-ui, sans-serif`
+  - `color.primary`: `#2B7A78`，`color.secondary`: `#3AAFA9`
+  - `color.text`: `#17252A`，`color.bg`: `#F5F5F5`
+  - `radius.md`: `0.75rem`；`shadow.card`: `0 8px 24px rgba(0,0,0,0.06)`
+- **元件風格**：毛玻璃卡（backdrop-blur）、可觸控面積 ≥ 44px、表單步驟式
+- **響應式**：Mobile 1 欄 → md 2 欄 → xl 3 欄；圖表自適應容器寬度
+
+---
+
+## 資訊流與依賴關係（Data Flow &amp; Dependencies）
+
+```
+Figma（MCP） → React 組件骨架 → Redux/Service 封裝 → UI（ChartCard、空狀態）
+                                           ↑
+                              Axios(services/api) ← Flask APIs（Health / Questionnaires）
+```
+
+- **單一真相來源（SSOT）**：Redux store
+- **層次**：UI（無狀態/輕邏輯）← Hook（視圖邏輯）← Slice/Thunk（資料取得）← Service（Axios）
+- **依賴**：頁面組裝依賴卡片與圖表；卡片依賴 `react-chartjs-2`；所有 API 走 `services/api.ts`
+- **錯誤處理**：Thunk 統一捕捉，UI 只關注 `loading/error/data`
+
+---
+
+## API 串接方法
+
+1. `.env` 設 `VITE_API_BASE_URL=http://localhost:5000`
+2. 建立 `services/api.ts`（Axios 實例 + 模組方法）
+3. 用 `createAsyncThunk` 包裝請求：例 `fetchHealthMetrics`
+4. 在頁面 `useEffect` → `dispatch(fetchHealthMetrics())`
+5. 把取得的資料映射為 Chart.js `ChartData` 與 `ChartOptions`（在 slice 或 selector 轉換）
+
+> ⚠️ **欄位名稱以實際 API 為準**（Health Data &amp; Questionnaires）。以下程式碼以常見欄位範例示意，若不同請在 `services/api.ts` 與 `healthMetricsSlice.ts` 的 mapping 註解處調整。
+
+---
+
+## 設計模式（前端）
+
+- **Container-Presenter**（頁面/容器持有邏輯；元件專注呈現）
+- **Feature-based folders**（`/features/healthMetrics/…`）
+- **Factory**（ButtonFactory 將樣式與交互標準化）
+- **Selector/Adapter**（在 slice 或 selector 把原始資料轉為圖表形態）
+- **Error Boundary / Suspense**（配合 React 18 加載與錯誤視圖）
+
+---
+
+## 🧩 模組化 Prompts（可貼入 `.cursorule` 的 JSON）
+
+> 把下列 **JSON 片段**依需求合併成一個 `modules` 陣列（或直接複製每段讓 Agent 生成檔案）。檔名與路徑可按專案調整。
+
+### 6.1 **ChartCard 元件模板**
+
+```json
+{
+  "type": "component",
+  "name": "ChartCard",
+  "description": "卡片包裝的圖表元件，支援 bar/line/doughnut，含標題、描述、無資料與載入狀態。",
+  "files": [
+    {
+      "name": "src/components/ChartCard.tsx",
+      "lang": "tsx",
+      "content": "import React from 'react';\nimport 'chart.js/auto';\nimport { Chart } from 'react-chartjs-2';\n\nexport type ChartKind = 'bar' | 'line' | 'doughnut';\n\nexport interface ChartCardProps {\n  title: string;\n  description?: string;\n  kind?: ChartKind;\n  data: any; // ChartData\n  options?: any; // ChartOptions\n  isLoading?: boolean;\n  emptyText?: string;\n}\n\nconst ChartCard: React.FC<ChartCardProps> = ({ title, description, kind = 'bar', data, options, isLoading, emptyText = '尚無資料' }) => {\n  return (\n    <div className=\"bg-white/70 backdrop-blur-md shadow rounded-xl p-6 min-h-[240px]\">\n      <div className=\"mb-3\">\n        <h2 className=\"text-xl font-bold text-gray-800\">{title}</h2>\n        {description && <p className=\"text-gray-600 text-sm mt-1\">{description}</p>}\n      </div>\n      {isLoading ? (\n        <div className=\"animate-pulse h-40 bg-gray-100 rounded\" />\n      ) : !data || !data.datasets || data.datasets.length === 0 ? (\n        <div className=\"text-gray-500 text-sm\">{emptyText}</div>\n      ) : (\n        <Chart type={kind} data={data} options={options} />\n      )}\n    </div>\n  );\n};\n\nexport default ChartCard;\n"
+    }
+  ]
+}
+```
+
+---
+
+### 6.2 **OverviewDashboard 整頁**
+
+```json
+{
+  "type": "page",
+  "name": "OverviewDashboard",
+  "description": "總覽頁，串接 health_metrics，聚合多張 ChartCard。",
+  "files": [
+    {
+      "name": "src/pages/OverviewDashboard.tsx",
+      "lang": "tsx",
+      "content": "import React, { useEffect } from 'react';\nimport { useAppDispatch, useAppSelector } from '../redux/hooks';\nimport { fetchHealthMetrics, selectChartPacks } from '../redux/healthMetricsSlice';\nimport ChartCard from '../components/ChartCard';\n\nconst OverviewDashboard: React.FC = () => {\n  const dispatch = useAppDispatch();\n  const { loading, error } = useAppSelector((s) => s.healthMetrics);\n  const charts = useAppSelector(selectChartPacks);\n\n  useEffect(() => {\n    dispatch(fetchHealthMetrics());\n  }, [dispatch]);\n\n  if (error) return <div className=\"p-6 text-red-600\">載入失敗：{error}</div>;\n\n  return (\n    <div className=\"p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6\">\n      <ChartCard title=\"每日喝水量 (ml)\" description=\"最近 7 天\" kind=\"line\" data={charts.water.data} options={charts.water.options} isLoading={loading} />\n      <ChartCard title=\"運動次數\" description=\"最近 7 天\" kind=\"bar\" data={charts.exercise.data} options={charts.exercise.options} isLoading={loading} />\n      <ChartCard title=\"吸藥次數\" description=\"最近 7 天\" kind=\"bar\" data={charts.inhale.data} options={charts.inhale.options} isLoading={loading} />\n      <ChartCard title=\"問卷完成率\" description=\"最近 7 天\" kind=\"doughnut\" data={charts.survey.data} options={charts.survey.options} isLoading={loading} />\n    </div>\n  );\n};\n\nexport default OverviewDashboard;\n"
+    }
+  ]
+}
+```
+
+---
+
+### 6.3 **health_metrics 的 useEffect + Redux 管理樣版**
+
+```json
+{
+  "type": "logic",
+  "name": "healthMetricsSlice",
+  "description": "RTK + Thunk 串接 health metrics 與問卷，並提供 selector 轉為 Chart.js 資料形態。",
+  "files": [
+    {
+      "name": "src/redux/healthMetricsSlice.ts",
+      "lang": "ts",
+      "content": "import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';\nimport type { PayloadAction } from '@reduxjs/toolkit';\nimport { getHealthMetrics, getQuestionnaires } from '../services/api';\nimport type { RootState } from './store';\n\nexport interface DayMetric { date: string; water_ml?: number; exercise_count?: number; inhale_count?: number; }\nexport interface SurveyAgg { completed: number; total: number; }\n\ninterface State {\n  loading: boolean;\n  error: string | null;\n  metrics: DayMetric[];\n  survey: SurveyAgg | null;\n}\n\nconst initialState: State = { loading: false, error: null, metrics: [], survey: null };\n\nexport const fetchHealthMetrics = createAsyncThunk('health/fetch', async () => {\n  const [metrics, questionnaire] = await Promise.all([\n    getHealthMetrics(),\n    getQuestionnaires()\n  ]);\n  return { metrics, questionnaire };\n});\n\nconst slice = createSlice({\n  name: 'healthMetrics',\n  initialState,\n  reducers: {},\n  extraReducers: (b) => {\n    b.addCase(fetchHealthMetrics.pending, (s) => { s.loading = true; s.error = null; })\n     .addCase(fetchHealthMetrics.fulfilled, (s, a: PayloadAction<{ metrics: DayMetric[]; questionnaire: SurveyAgg }>) => {\n        s.loading = false; s.metrics = a.payload.metrics; s.survey = a.payload.questionnaire;\n     })\n     .addCase(fetchHealthMetrics.rejected, (s, a) => { s.loading = false; s.error = a.error.message || 'Unknown error'; });\n  }\n});\n\nexport default slice.reducer;\n\n// === Selectors: 映射為圖表資料 ===\nconst days = (n: number, arr: DayMetric[]) => arr.slice(-n);\nexport const selectChartPacks = (state: RootState) => {\n  const last7 = days(7, state.healthMetrics.metrics);\n  const labels = last7.map(d => d.date);\n  const mkData = (vals: (number | undefined)[]) => ({ labels, datasets: [{ label: '值', data: vals.map(v => v ?? 0), backgroundColor: 'rgba(56,189,248,0.4)', borderColor: 'rgba(56,189,248,1)' }] });\n\n  const waterVals = last7.map(d => d.water_ml);\n  const exerciseVals = last7.map(d => d.exercise_count);\n  const inhaleVals = last7.map(d => d.inhale_count);\n\n  const survey = state.healthMetrics.survey;\n  const surveyData = survey ? {\n    labels: ['完成', '未完成'],\n    datasets: [{ data: [survey.completed, Math.max(survey.total - survey.completed, 0)], backgroundColor: ['#22c55e','#e5e7eb'] }]\n  } : { labels: [], datasets: [] };\n\n  return {\n    water:   { data: mkData(waterVals),   options: { responsive: true } },\n    exercise:{ data: mkData(exerciseVals),options: { responsive: true } },\n    inhale:  { data: mkData(inhaleVals),  options: { responsive: true } },\n    survey:  { data: surveyData,          options: { plugins: { legend: { position: 'bottom' }}} }\n  };\n};\n"
+    }
+  ]
+}
+```
+
+---
+
+### 6.4 **ButtonFactory（.cursorule 自動化套件生成器）**
+
+```json
+{
+  "type": "component-factory",
+  "name": "ButtonFactory",
+  "description": "統一風格按鈕工廠，支援 variant/size/disabled，利於一致性與可維護性。",
+  "files": [
+    {
+      "name": "src/components/ButtonFactory.tsx",
+      "lang": "tsx",
+      "content": "import React from 'react';\nimport clsx from 'classnames';\n\ntype Variant = 'primary' | 'secondary' | 'ghost';\ntype Size = 'sm' | 'md' | 'lg';\n\ninterface Props extends React.ButtonHTMLAttributes<HTMLButtonElement> {\n  variant?: Variant;\n  size?: Size;\n}\n\nconst base = 'rounded font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';\nconst variants: Record<Variant, string> = {\n  primary: 'bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-600',\n  secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400',\n  ghost: 'bg-transparent text-teal-700 hover:bg-teal-50 focus:ring-teal-600'\n};\nconst sizes: Record<Size, string> = {\n  sm: 'text-sm px-3 py-1.5',\n  md: 'text-base px-4 py-2',\n  lg: 'text-lg px-5 py-3'\n};\n\nconst ButtonFactory: React.FC<Props> = ({ variant='primary', size='md', className, ...rest }) => (\n  <button className={clsx(base, variants[variant], sizes[size], className)} {...rest} />\n);\n\nexport default ButtonFactory;\n"
+    }
+  ]
+}
+```
+
+---
+
+### 6.5（選配）**Redux `store` / 共用 `hooks` / `api` 服務**
+
+```json
+{
+  "type": "logic",
+  "name": "reduxStoreAndAPI",
+  "description": "標準 RTK Store + 型別化 hooks + Axios 服務模組。",
+  "files": [
+    {
+      "name": "src/redux/store.ts",
+      "lang": "ts",
+      "content": "import { configureStore } from '@reduxjs/toolkit';\nimport healthMetrics from './healthMetricsSlice';\n\nexport const store = configureStore({ reducer: { healthMetrics } });\nexport type RootState = ReturnType<typeof store.getState>;\nexport type AppDispatch = typeof store.dispatch;\n"
+    },
+    {
+      "name": "src/redux/hooks.ts",
+      "lang": "ts",
+      "content": "import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';\nimport type { RootState, AppDispatch } from './store';\n\nexport const useAppDispatch = () => useDispatch<AppDispatch>();\nexport const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;\n"
+    },
+    {
+      "name": "src/services/api.ts",
+      "lang": "ts",
+      "content": "import axios from 'axios';\n\nconst api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000' });\n\n// ⚠️ 依據 http://localhost:5000/apidocs/#/ 的實際端點與欄位調整\nexport async function getHealthMetrics() {\n  // 例：GET /api/health-data → 返回 DayMetric[]\n  const { data } = await api.get('/api/health-data');\n  return data;\n}\n\nexport async function getQuestionnaires() {\n  // 例：GET /api/questionnaires → 返回 { completed, total }\n  const { data } = await api.get('/api/questionnaires');\n  return data;\n}\n\nexport default api;\n"
+    }
+  ]
+}
+```
+
+---
+
+## 在 Cursor 使用方式與建議 Prompt
+
+### 1) 將 JSON 模組登錄到 `.cursorule`
+
+- 建議結構（把多段合併成 `modules` 陣列）：
+
+```json
+{
+  "name": "RespiraAlly Dashboard MCP",
+  "description": "React + Tailwind + Chart.js + Redux Toolkit；串接 Health Data & Questionnaires。",
+  "modules": [
+    { ...ChartCard JSON... },
+    { ...OverviewDashboard JSON... },
+    { ...healthMetricsSlice JSON... },
+    { ...ButtonFactory JSON... },
+    { ...reduxStoreAndAPI JSON... }
+  ]
+}
+```
+
+### 2) 典型指令（可複製進 Cursor Agent）
+
+- **建立頁面骨架**
+  > 依 `.cursorule` 的 OverviewDashboard 模組，生成頁面與需要的 import；缺檔案請一併建立。
+- **接 API 串資料**
+  > 在 OverviewDashboard 掛載時 dispatch `fetchHealthMetrics()`，並使用 `selectChartPacks` 填 ChartCard。
+- **新增新圖表卡**
+  > 以 ChartCard 模組為模板，新增一張「睡眠時數（line）」卡片，資料來源 health_metrics 中 `sleep_hours` 欄位。
+- **設計一致化控件**
+  > 以 ButtonFactory 建立主要/次要/ghost 三類按鈕，替換頁面上散落的 `<button>`。
+
+---
+
+### 備註
+
+- **API 欄位**請對照實際的 `Health Data & Questionnaires`，調整 `services/api.ts` 與 `healthMetricsSlice.ts` 的欄位 mapping。
+- 若需要，我可以把本檔轉換為可直接被 `.cursorule` 読取的完整 JSON 格式，或直接寫入你的 MCP 伺服設定。

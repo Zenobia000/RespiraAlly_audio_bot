@@ -26,7 +26,9 @@ def create_app(config_name="default"):
     """
     應用程式工廠函數。
     """
-    app = Flask(__name__)
+    # 設定靜態檔案目錄為包含 React 建置檔案的 static 目錄
+    static_folder = os.path.join(os.path.dirname(__file__), 'static')
+    app = Flask(__name__, static_folder=static_folder)
 
     # 1. 載入設定
     app.config.from_object(config[config_name])
@@ -74,10 +76,41 @@ def create_app(config_name="default"):
             500,
         )
 
-    # 根路由，用於健康檢查
+    # 靜態檔案路由 - 服務 React 建置檔案
+    @app.route('/static/dist/<path:filename>')
+    def serve_react_static(filename):
+        from flask import send_from_directory
+        return send_from_directory(os.path.join(app.static_folder, 'dist'), filename)
+    
+    # 根路由，重導向到 React 應用程式
     @app.route("/")
     def index():
-        return "Web App is running!"
+        from flask import send_from_directory
+        dist_folder = os.path.join(app.static_folder, 'dist')
+        return send_from_directory(dist_folder, 'index.html')
+    
+    # SPA 路由支援 - 捕獲所有非 API 路由，重導向到 React 應用程式
+    @app.route('/<path:path>')
+    def catch_all(path):
+        # 排除 API 路由和靜態資源
+        if path.startswith('api/') or path.startswith('static/') or path.startswith('swagger/'):
+            from flask import abort
+            abort(404)
+        
+        # 檢查是否為靜態檔案（JS, CSS, 圖片等）
+        if '.' in path.split('/')[-1]:
+            try:
+                from flask import send_from_directory
+                dist_folder = os.path.join(app.static_folder, 'dist')
+                return send_from_directory(dist_folder, path)
+            except:
+                from flask import abort
+                abort(404)
+        
+        # 所有其他路由都返回 React 應用程式
+        from flask import send_from_directory
+        dist_folder = os.path.join(app.static_folder, 'dist')
+        return send_from_directory(dist_folder, 'index.html')
 
     # WebSocket 事件處理
     @socketio.on("connect")
