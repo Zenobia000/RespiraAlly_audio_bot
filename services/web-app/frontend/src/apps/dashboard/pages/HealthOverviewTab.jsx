@@ -148,7 +148,10 @@ const HealthOverviewTab = () => {
       <section className="section">
         <div className="chart-card full-width">
           <h3 className="chart-title">四大健康追蹤依從性趨勢（整體）</h3>
-          <BehaviorAdherenceTrend data={adherence} />
+          <BehaviorAdherenceTrend
+            data={adherence}
+            range={localTimeRange.range}
+          />
         </div>
       </section>
 
