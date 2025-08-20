@@ -17,6 +17,10 @@ node_modules
 doucment/
 API文件.csv
 .env
+voice_chat.md
+.cursorrules
+前端技術解說文件.md
+web_dashboard/
 
 # Logs
 logs
@@ -49,3 +53,4 @@ dist-ssr
 4_deployment
 design_templates
 seed_csv_output/
+web_dashboard/
