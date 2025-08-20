@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../shared/contexts/AuthContext";
 
+// 檢查是否為開發模式且禁用 LIFF
+const isDevelopment = import.meta.env.DEV;
+const disableLiff = import.meta.env.VITE_DISABLE_LIFF === "true";
+const enableMock = import.meta.env.VITE_ENABLE_MOCK === "true";
+
 // 🎨 UI 開發版本 - 移除所有 LINE 認證邏輯
 export const useLIFF = () => {
   const _auth = useAuth();
@@ -23,7 +28,16 @@ export const useLIFF = () => {
   });
 
   useEffect(() => {
-    console.log("🎨 UI 開發模式 - 直接提供測試數據，無需任何認證");
+    // 清理任何可能的 LIFF SDK 引用
+    if (typeof window !== "undefined") {
+      window.liff = null;
+      delete window.liff;
+    }
+
+    if (isDevelopment || enableMock || disableLiff) {
+      console.log("🎨 UI 開發模式 - 直接提供測試數據，無需任何認證");
+      console.log("環境變數:", { isDevelopment, enableMock, disableLiff });
+    }
   }, []);
 
   // Mock 函數
