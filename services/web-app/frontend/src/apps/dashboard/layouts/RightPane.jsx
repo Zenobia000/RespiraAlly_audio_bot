@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { usePatients, useAlerts } from "../../../shared/api/hooks";
 import { RISK_LEVELS } from "../../../shared/config";
 
-const RightPane = () => {
+const RightPane = ({ collapsed, onToggle }) => {
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -26,112 +26,184 @@ const RightPane = () => {
   const showAlerts = true; // 總是顯示通報
 
   return (
-    <aside className="right-pane">
-      {/* 病患搜尋 (個案管理頁) */}
-      {showPatientList && (
-        <div className="pane-section">
-          <h3 className="pane-title">快速搜尋</h3>
-          <div className="search-box">
-            <input
-              type="text"
-              className="input"
-              placeholder="搜尋病患姓名..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* 高風險病患列表 */}
-      <div className="pane-section">
-        <h3 className="pane-title">
-          <span className="title-icon">⚠️</span>
-          高風險病患
-        </h3>
-        {isLoading ? (
-          <div className="loading">載入中...</div>
-        ) : (
-          <ul className="patient-list">
-            {filteredPatients.slice(0, 5).map((patient) => (
-              <li key={patient.id} className="patient-item">
-                <div className="patient-info">
-                  <div className="patient-name">{patient.name}</div>
-                  <div className="patient-meta">
-                    CAT: {patient.cat_score} | mMRC: {patient.mmrc_score}
-                  </div>
-                </div>
-                <span className="risk-badge high">高風險</span>
-              </li>
-            ))}
-          </ul>
-        )}
+    <aside className={`right-pane ${collapsed ? "collapsed" : ""}`}>
+      {/* 收合/展開按鈕 */}
+      <div className="pane-header">
+        {!collapsed && <h2 className="pane-main-title">輔助資訊</h2>}
+        <button
+          className="pane-toggle"
+          onClick={onToggle}
+          aria-label={collapsed ? "展開右側欄" : "收合右側欄"}
+        >
+          {collapsed ? "←" : "→"}
+        </button>
       </div>
 
-      {/* 低依從性病患 */}
-      <div className="pane-section">
-        <h3 className="pane-title">
-          <span className="title-icon">📉</span>
-          低依從性病患
-        </h3>
-        <ul className="patient-list">
-          {patients
-            .filter((p) => p.adherence_rate < 0.6)
-            .slice(0, 5)
-            .map((patient) => (
-              <li key={patient.id} className="patient-item">
-                <div className="patient-info">
-                  <div className="patient-name">{patient.name}</div>
-                  <div className="patient-meta">
-                    依從率: {Math.round(patient.adherence_rate * 100)}%
-                  </div>
-                </div>
-                <span className="risk-badge warning">需關注</span>
-              </li>
-            ))}
-        </ul>
-      </div>
-
-      {/* AI 即時通報 */}
-      {showAlerts && (
-        <div className="pane-section">
-          <h3 className="pane-title">
-            <span className="title-icon">🤖</span>
-            AI 即時通報
-          </h3>
-          <div className="alerts-container">
-            {alerts.length === 0 ? (
-              <div className="empty-state">
-                <span className="empty-icon">🔔</span>
-                <p>目前無新通報</p>
+      {/* 主要內容 - 只在未收合時顯示 */}
+      {!collapsed && (
+        <>
+          {/* 病患搜尋 (個案管理頁) */}
+          {showPatientList && (
+            <div className="pane-section">
+              <h3 className="pane-title">快速搜尋</h3>
+              <div className="search-box">
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="搜尋病患姓名..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
+            </div>
+          )}
+
+          {/* 高風險病患列表 */}
+          <div className="pane-section">
+            <h3 className="pane-title">
+              <span className="title-icon">⚠️</span>
+              高風險病患
+            </h3>
+            {isLoading ? (
+              <div className="loading">載入中...</div>
             ) : (
-              <ul className="alert-list">
-                {alerts.map((alert) => (
-                  <li key={alert.id} className={`alert-item ${alert.level}`}>
-                    <div className="alert-time">
-                      {new Date(alert.ts).toLocaleTimeString("zh-TW", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+              <ul className="patient-list">
+                {filteredPatients.slice(0, 5).map((patient) => (
+                  <li key={patient.id} className="patient-item">
+                    <div className="patient-info">
+                      <div className="patient-name">{patient.name}</div>
+                      <div className="patient-meta">
+                        CAT: {patient.cat_score} | mMRC: {patient.mmrc_score}
+                      </div>
                     </div>
-                    <div className="alert-message">{alert.message}</div>
+                    <span className="risk-badge high">高風險</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
-        </div>
+
+          {/* 低依從性病患 */}
+          <div className="pane-section">
+            <h3 className="pane-title">
+              <span className="title-icon">📉</span>
+              低依從性病患
+            </h3>
+            <ul className="patient-list">
+              {patients
+                .filter((p) => p.adherence_rate < 0.6)
+                .slice(0, 5)
+                .map((patient) => (
+                  <li key={patient.id} className="patient-item">
+                    <div className="patient-info">
+                      <div className="patient-name">{patient.name}</div>
+                      <div className="patient-meta">
+                        依從率: {Math.round(patient.adherence_rate * 100)}%
+                      </div>
+                    </div>
+                    <span className="risk-badge warning">需關注</span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+
+          {/* AI 即時通報 */}
+          {showAlerts && (
+            <div className="pane-section">
+              <h3 className="pane-title">
+                <span className="title-icon">🤖</span>
+                AI 即時通報
+              </h3>
+              <div className="alerts-container">
+                {alerts.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-icon">🔔</span>
+                    <p>目前無新通報</p>
+                  </div>
+                ) : (
+                  <ul className="alert-list">
+                    {alerts.map((alert) => (
+                      <li
+                        key={alert.id}
+                        className={`alert-item ${alert.level}`}
+                      >
+                        <div className="alert-time">
+                          {new Date(alert.ts).toLocaleTimeString("zh-TW", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                        <div className="alert-message">{alert.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <style jsx>{`
         .right-pane {
+          position: fixed;
+          top: 0;
+          right: 0;
           width: 280px;
+          height: 100vh;
           background: white;
           border-left: 1px solid var(--border);
           padding: 20px;
           overflow-y: auto;
-          max-height: calc(100vh - 60px);
+          transition: width 200ms ease;
+          z-index: 90;
+        }
+
+        .right-pane.collapsed {
+          width: 60px;
+          padding: 10px;
+        }
+
+        .pane-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .pane-main-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text);
+          margin: 0;
+        }
+
+        .pane-toggle {
+          background: white;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 200ms;
+          font-size: 14px;
+        }
+
+        .pane-toggle:hover {
+          background: var(--primary);
+          color: white;
+        }
+
+        .collapsed .pane-toggle {
+          width: 40px;
+          height: 40px;
+          font-size: 16px;
+          margin: 0 auto;
         }
 
         .pane-section {

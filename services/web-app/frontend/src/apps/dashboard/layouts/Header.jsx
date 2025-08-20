@@ -1,52 +1,64 @@
-import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import dayjs from 'dayjs'
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
+import dayjs from "dayjs";
+import quarterOfYear from "dayjs/plugin/quarterOfYear";
 
-const Header = ({ onToggleRightPane }) => {
-  const location = useLocation()
-  const [dateRange, setDateRange] = useState({
-    from: dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
-    to: dayjs().format('YYYY-MM-DD')
-  })
-  const [riskFilter, setRiskFilter] = useState('')
+// 啟用季度插件
+dayjs.extend(quarterOfYear);
+
+const Header = ({ onToggleRightPane, onFiltersChange, rightPaneVisible }) => {
+  const location = useLocation();
+  const [quickTimeRange, setQuickTimeRange] = useState("month");
+  const [riskFilter, setRiskFilter] = useState("");
 
   // 根據路由決定標題
   const getPageTitle = () => {
-    const path = location.pathname
-    if (path.includes('/overview')) return '病患整體趨勢總覽'
-    if (path.includes('/cases')) return '病患個案管理'
-    if (path.includes('/education')) return '衛教資源管理'
-    if (path.includes('/tasks')) return '任務管理'
-    return 'Dashboard'
-  }
+    const path = location.pathname;
+    if (path.includes("/overview")) return "病患整體趨勢總覽";
+    if (path.includes("/cases")) return "病患個案管理";
+    if (path.includes("/education")) return "衛教資源管理";
+    if (path.includes("/tasks")) return "任務管理";
+    return "Dashboard";
+  };
 
-  const showFilters = location.pathname.includes('/overview') || location.pathname.includes('/cases')
+  const showFilters =
+    location.pathname.includes("/overview") ||
+    location.pathname.includes("/cases");
+
+  const handleRiskFilterChange = (value) => {
+    setRiskFilter(value);
+    if (onFiltersChange) {
+      onFiltersChange({ riskFilter: value, quickTimeRange });
+    }
+  };
+
+  const handleQuickTimeChange = (value) => {
+    setQuickTimeRange(value);
+    if (onFiltersChange) {
+      onFiltersChange({ riskFilter, quickTimeRange: value });
+    }
+  };
 
   return (
     <header className="header">
       <div className="header-content">
         <h1 className="page-title">{getPageTitle()}</h1>
-        
+
         {showFilters && (
           <div className="header-filters">
-            {/* 日期範圍選擇 */}
+            {/* 快速時間範圍 */}
             <div className="filter-group">
-              <label className="filter-label">日期範圍</label>
-              <div className="date-range">
-                <input
-                  type="date"
-                  className="input input-small"
-                  value={dateRange.from}
-                  onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-                />
-                <span className="date-separator">至</span>
-                <input
-                  type="date"
-                  className="input input-small"
-                  value={dateRange.to}
-                  onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-                />
-              </div>
+              <label className="filter-label">時間範圍</label>
+              <select
+                className="select"
+                value={quickTimeRange}
+                onChange={(e) => handleQuickTimeChange(e.target.value)}
+              >
+                <option value="week">本週</option>
+                <option value="month">本月</option>
+                <option value="quarter">本季</option>
+                <option value="last30days">最近30天</option>
+              </select>
             </div>
 
             {/* 風險篩選 */}
@@ -55,9 +67,9 @@ const Header = ({ onToggleRightPane }) => {
               <select
                 className="select"
                 value={riskFilter}
-                onChange={(e) => setRiskFilter(e.target.value)}
+                onChange={(e) => handleRiskFilterChange(e.target.value)}
               >
-                <option value="">全部</option>
+                <option value="">全部風險</option>
                 <option value="high">高風險</option>
                 <option value="medium">中風險</option>
                 <option value="low">低風險</option>
@@ -122,27 +134,19 @@ const Header = ({ onToggleRightPane }) => {
           font-weight: 500;
         }
 
-        .date-range {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .date-separator {
-          color: var(--muted);
-          font-size: 14px;
-        }
-
-        .input-small {
-          padding: 6px 10px;
-          font-size: 14px;
-          min-width: 120px;
-        }
-
         .select {
           padding: 6px 10px;
           font-size: 14px;
-          min-width: 100px;
+          min-width: 120px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: white;
+          cursor: pointer;
+        }
+
+        .select:focus {
+          outline: none;
+          border-color: var(--primary);
         }
 
         .header-actions {
@@ -183,7 +187,7 @@ const Header = ({ onToggleRightPane }) => {
         }
       `}</style>
     </header>
-  )
-}
+  );
+};
 
-export default Header
+export default Header;

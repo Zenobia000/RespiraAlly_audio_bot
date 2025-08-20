@@ -42,6 +42,7 @@
     "react-router-dom": "^6.28.0",
     "react-window": "^1.8.10",
     "recharts": "^2.13.3",
+    "styled-jsx": "^5.1.7",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -50,8 +51,7 @@
     "@testing-library/user-event": "^14.5.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
-    "@vitejs/plugin-react-swc": "^3.7.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^2.1.5",
     "eslint": "^9.14.0",
     "eslint-plugin-react": "^7.37.2",

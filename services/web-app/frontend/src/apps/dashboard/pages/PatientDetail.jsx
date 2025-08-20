@@ -12,6 +12,7 @@ import PatientKpis from "../components/PatientKpis";
 import PatientMetricsSmallMultiples from "../components/PatientMetricsSmallMultiples";
 import TrendCatMmrcChart from "../components/TrendCatMmrcChart";
 import EvaluationSuggestions from "../components/EvaluationSuggestions";
+import PatientGoals from "../components/PatientGoals";
 import dayjs from "dayjs";
 
 const PatientDetail = () => {
@@ -68,6 +69,9 @@ const PatientDetail = () => {
 
         {/* 右側 - 圖表與建議 */}
         <div className="right-column">
+          {/* 個人化目標追蹤 */}
+          <PatientGoals metrics={metrics} />
+
           {/* 健康追蹤小倍數 */}
           <div className="chart-card">
             <h3 className="chart-title">四大健康追蹤（近30天）</h3>

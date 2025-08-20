@@ -108,13 +108,18 @@ const SidebarNav = ({ collapsed, onToggle }) => {
 
       <style jsx>{`
         .sidebar {
+          position: fixed;
+          top: 0;
+          left: 0;
           width: 240px;
+          height: 100vh;
           background: linear-gradient(180deg, #ecf6ff, #f7f5ff);
           border-right: 1px solid var(--border);
           display: flex;
           flex-direction: column;
           transition: width 200ms ease;
-          position: relative;
+          z-index: 100;
+          overflow-y: auto;
         }
 
         .sidebar.collapsed {
