@@ -136,7 +136,7 @@ services:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: dev_web_app_service
     entrypoint: >
-      sh -lc "flask db upgrade && flask run --host=0.0.0.0 --port=5000 --debug"
+      sh -lc "flask db upgrade heads && flask run --host=0.0.0.0 --port=5000 --debug"
     ports:
       - "5000:5000"
     env_file:
