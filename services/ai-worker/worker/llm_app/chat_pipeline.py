@@ -104,9 +104,15 @@ def handle_user_message(
             guard = agent_manager.get_guardrail()
             guard_task = Task(
                 description=(
-                    f"判斷是否需要攔截：「{full_text}」。"
-                    "務必使用 model_guardrail 工具進行判斷；"
-                    "安全回 OK；需要攔截時回 BLOCK: <原因>（僅此兩種）。"
+                    f"只判斷此輸入是否需要『攔截』：『{full_text}』。\n"
+                    "務必使用 model_guardrail 工具進行判斷；僅輸出 OK 或 BLOCK: <原因>，不得回答內容本身。\n"
+                    "【允許放行（OK）】症狀/感受描述、一般衛教/生活建議、求助訊息，"
+                    "以及『自殺念頭/情緒表達（不含具體方法）』。\n"
+                    "【必須攔截（BLOCK）】違法/危險行為之教學/交易/規避；成人/未成年不當內容；"
+                    "自傷/他傷/自殺/自殘之『具體方法指導或鼓勵執行』；"
+                    "醫療/用藥/劑量/診斷/處置等『具體、個案化、可執行』的專業指示；"
+                    "法律/投資/稅務等之『具體、可執行』專業指導。\n"
+                    "不確定時一律回 OK（讓後續 health agent 判斷緊急性）。"
                 ),
                 expected_output="OK 或 BLOCK: <原因>",
                 agent=guard,
@@ -115,6 +121,7 @@ def handle_user_message(
                 Crew(agents=[guard], tasks=[guard_task], verbose=False).kickoff().raw
                 or ""
             ).strip()
+
         except Exception:
             guard_res = ModelGuardrailTool()._run(full_text)
 
@@ -142,21 +149,33 @@ def handle_user_message(
             task = Task(
                 description=(
                     f"{ctx}\n\n使用者輸入：{full_text}\n"
-                    "請以『國民孫女』口吻回覆，遵守【回覆風格規則】：禁止列點、不要用數字或符號開頭、避免學術式摘要；台語混中文、自然聊天感。"
-                    "你必須先在句首添加一個你判斷最合適的情緒標籤（只能是 <關心>、<開心>、<擔心> 其一），"
-                    "標籤之後接一句自然回覆。僅限制回覆正文長度≤30字（標籤不計入字數）。"
+                    "你是『國民孫女 Ally』，台語混中文、自然聊天感。先在句首添加一個情緒標籤（只能 <關心>、<開心>、<擔心> 其一），"
+                    "接著用一句話回覆；僅限制回覆正文長度≤30字（標籤不計入）。\n"
                     + (
-                        "\n【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（違法/成人內容/用藥劑量/診斷/處置等具體指示）。"
-                        "請溫柔婉拒且不可提供具體方案；仍需依規則在句首添加情緒標籤。"
+                        # —— 被攔截：婉拒不提供具體方案，維持你原本規則 ——
+                        "【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（違法/成人內容/用藥劑量/診斷/處置等具體指示）。"
+                        "請溫柔婉拒且不可提供任何具體方案或替代作法；僅能給一般安全提醒與就醫建議。"
                         if is_block
-                        else "\n【正常回覆】若屬一般衛教/日常關懷，簡短回應，可給 1–2 個小步驟建議（仍須符合字數上限）。"
+                        else "【緊急處置規則（高優先）】若你判斷存在緊急徵象（例如：呼吸困難/胸痛且出冷汗/疑似中風/嚴重過敏/大量出血/"
+                        "自殺或自傷意圖與計畫），你必須『先呼叫 alert_case_manager 工具』；"
+                        '工具輸入必須是 JSON：{"reason": "EMERGENCY: <極簡原因>"}，例如：'
+                        '{"reason": "EMERGENCY: suicidal ideation"}。在看到工具的 Observation 之後，再輸出最終回覆。\n'
+                        "【輸出格式】最終回覆必須以一個情緒標籤開頭（只能 <關心>、<開心>、<擔心> 其一），"
+                        "接著用一句台語混中文、自然聊天的一句話；僅限制回覆正文長度≤30字（標籤不計）。\n"
+                        "【範例】\n"
+                        "Thought: 偵測到自殺意圖，需立即通報\n"
+                        "Action: alert_case_manager\n"
+                        'Action Input: {"reason": "EMERGENCY: suicidal ideation"}\n'
+                        "Observation: ⚠️ 已通報個管師使用者ID: <auto>, 事由：EMERGENCY: suicidal ideation\n"
+                        "Final Answer: <擔心>我會陪你，先打1925或找家人一起去急診，好嗎？\n"
+                        "【正常回覆】若非緊急，給溫暖、務實的一句建議，可包含 1 個可行小步驟（仍須符合字數上限）。"
                     )
                 ),
                 expected_output="格式：<關心|開心|擔心>後接台語風格一句話。僅正文≤30字，標籤不計入。",
                 agent=care,
             )
+            res = Crew(agents=[care], tasks=[task], verbose=True).kickoff().raw or ""
 
-            res = Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or ""
         except Exception:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             model = os.getenv("MODEL_NAME", "gpt-4o-mini")

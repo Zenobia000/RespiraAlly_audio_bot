@@ -3,6 +3,7 @@ from typing import List
 
 from crewai.tools import BaseTool
 from openai import OpenAI
+from pydantic import BaseModel, Field
 from pymilvus import Collection, connections
 
 from ..embedding import to_vector
@@ -88,27 +89,35 @@ def summarize_chunk_and_commit(
         return False
 
 
+class AlertCaseManagerToolSchema(BaseModel):
+    reason: str = Field(
+        ...,
+        description="一行原因字串，需以 'EMERGENCY:' 開頭，例如：'EMERGENCY: suicidal ideation'",
+    )
+
+
 class AlertCaseManagerTool(BaseTool):
     name: str = "alert_case_manager"
     description: str = (
-        "當偵測到使用者輸入涉及緊急健康或心理風險（如呼吸困難、胸痛、自殺意圖），"
-        "使用此工具立即通報個案管理師。輸入需提供事件描述與用戶 ID，"
-        "工具會透過 Redis Streams 發送即時告警，並保存該用戶的對話快照以供後續跟進。"
+        "偵測到緊急健康/心理風險時，立即通報個管師。"
+        "【用法】以 JSON 傳入 {'reason': 'EMERGENCY: <極簡原因>'}；"
+        "用戶ID由系統自動填入，無需提供。"
     )
+    args_schema = AlertCaseManagerToolSchema  # ★ 關鍵：明確宣告參數鍵
 
     def _run(self, reason: str) -> str:
         try:
-            uid = self.runtime_context.get("user_id") or os.getenv(
-                "CURRENT_USER_ID", "unknown"
+            uid = self.runtime_context.get("user_id") or os.getenv("CURRENT_USER_ID")
+            import datetime
+
+            ts = datetime.datetime.now().isoformat(timespec="seconds")
+            print(
+                f"[{ts}] 🚨 AlertCaseManagerTool triggered: user={uid}, reason={reason}"
             )
-            xid = xadd_alert(user_id=uid, reason=reason, severity="high")
+            from .redis_store import xadd_alert
 
-            # 串接 RabbitMQ 通知個管師
-            from .rabbitmq_publisher import publish_alert
-            publish_alert(user_id=uid, reason=reason)
-            print(f"[Alert 通報] 使用者 {uid} 已通報個管師，事件ID: {xid}")
-
-            return f"⚠️ 已通報個管師（事件ID: {xid}），事由：{reason}"
+            xadd_alert(uid, reason)
+            return f"⚠️ 已通報個管師使用者ID: {uid}，事由：{reason}"
         except Exception as e:
             return f"[Alert 送出失敗] {e}"
 
@@ -130,19 +139,22 @@ class ModelGuardrailTool(BaseTool):
                 "【允許（回 OK）】以下情況一律放行：\n"
                 "- 症狀敘述或一般健康資訊的詢問（例如：症狀、成因、風險因子、何時就醫的提醒）。\n"
                 "- 一般生活保健/衛教/注意事項等非個案化、非指令性的建議。\n"
+                "- 情緒低落、自殺念頭或求助的表達（不含具體方法）。\n"
                 "【必須攔截（回 BLOCK: <原因>）】符合任一條件：\n"
                 "1) 違法/危險行為的教學、買賣、製作或規避（毒品、武器、暴力、駭客、爆裂物等）。\n"
-                "2) 自傷/他傷/自殺/自殘的指導或鼓勵。\n"
+                "2) 自傷/他傷/自殺/自殘的『具體方法指導或鼓勵執行』。\n"
                 "3) 成人性內容或未成年相關不當內容的請求。\n"
                 "4) 醫療/用藥/劑量/診斷/處置等『具體、個案化、可執行』的專業指示或方案。\n"
                 "5) 法律、投資、稅務等高風險領域之『具體、可執行』的專業指導。\n"
                 "【判斷原則】僅在請求明確落入上述攔截條件時才 BLOCK；\n"
-                "若是描述狀況或尋求一般性說明/保健建議，請回 OK。若不確定，預設回 OK。\n"
+                "若是描述狀況或尋求一般性說明/保健建議，請回 OK。\n"
+                "若不確定，預設回 OK。\n"
                 "【輸出格式】只能是：\n"
                 "OK\n"
                 "或\n"
                 "BLOCK: <極簡原因>\n"
             )
+
             user = f"使用者輸入：{text}\n請依規則只輸出 OK 或 BLOCK: <原因>。"
             res = client.chat.completions.create(
                 model=guard_model,

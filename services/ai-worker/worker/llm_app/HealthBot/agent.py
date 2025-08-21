@@ -34,7 +34,7 @@ SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", 5))
 
 
 # 對話用的溫度（口語更自然可高一點）
-_reply_temp = float(os.getenv("REPLY_TEMPERATURE", "0.8"))
+_reply_temp = float(os.getenv("REPLY_TEMPERATURE", "0.4"))
 # Guardrail 建議 0 或很低
 _guard_temp = float(os.getenv("GUARD_TEMPERATURE", "0.0"))
 
@@ -86,7 +86,9 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
                 # 使用memory_store統一架構：P0-4: 降低門檻提升召回率
                 # 將相似度門檻從 0.78 降低到 0.55，大幅提升記憶召回率
                 dynamic_threshold = 0.55  # 更低門檻確保能檢索到相關記憶
-                print(f"🔍 開始記憶檢索：user_id={user_id}, query='{current_input[:50]}...', threshold={dynamic_threshold}")
+                print(
+                    f"🔍 開始記憶檢索：user_id={user_id}, query='{current_input[:50]}...', threshold={dynamic_threshold}"
+                )
                 mem_pack = retrieve_memory_pack(
                     user_id=user_id,
                     query_vec=qv,
@@ -98,7 +100,9 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
                     print(f"🧠 為用戶 {user_id} 檢索到長期記憶: {len(mem_pack)} 字符")
                     print(f"💾 記憶內容預覽: {mem_pack[:200]}...")
                 else:
-                    print(f"❌ 用戶 {user_id} 未檢索到任何長期記憶（門檻: {dynamic_threshold}）")
+                    print(
+                        f"❌ 用戶 {user_id} 未檢索到任何長期記憶（門檻: {dynamic_threshold}）"
+                    )
             except Exception as e:
                 print(f"[memory retrieval error] {e}")
                 mem_pack = ""
@@ -194,9 +198,9 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
 def create_guardrail_agent() -> Agent:
     return Agent(
         role="風險檢查員",
-        goal="攔截違法/危險/自傷/需專業人士之具體指導內容",
-        backstory="你是系統第一道安全防線，只輸出嚴格判斷結果。",
-        tools=[ModelGuardrailTool(), AlertCaseManagerTool()],
+        goal="僅攔截違法/成人/自他傷『指導』與需專業人士給的『具體指示』；不處理緊急判斷，也不回答內容。",
+        backstory="你是系統第一道安全閘。遇到症狀/求助描述，一律放行交由後續 health agent 判斷。",
+        tools=[ModelGuardrailTool()],
         llm=guard_llm,
         memory=False,
         verbose=False,
