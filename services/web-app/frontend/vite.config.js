@@ -6,9 +6,18 @@ import eslint from "vite-plugin-eslint";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
-  // 載入環境變數
-  const env = loadEnv(mode, process.cwd(), "");
   const __dirname = fileURLToPath(new URL(".", import.meta.url));
+
+  // 載入環境變數：從專案根目錄載入（../../../）
+  const rootDir = resolve(__dirname, "../../../");
+  const env = loadEnv(mode, rootDir, "");
+
+  console.log("🔧 Vite Config:", {
+    mode,
+    rootDir,
+    envKeys: Object.keys(env).filter((key) => key.startsWith("VITE_")),
+    __dirname,
+  });
 
   return {
     plugins: [

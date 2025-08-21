@@ -5,7 +5,7 @@
 from datetime import datetime, timedelta, date
 from typing import Dict, List, Any, Optional
 from sqlalchemy import func, and_, or_
-from ..models import User, HealthProfile, DailyMetric, CATQuestionnaire, MMRCQuestionnaire
+from ..models import User, HealthProfile, DailyMetric, QuestionnaireCAT, QuestionnaireMMRC
 from ..extensions import db
 import logging
 

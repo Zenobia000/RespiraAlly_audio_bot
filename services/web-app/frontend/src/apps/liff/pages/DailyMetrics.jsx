@@ -5,34 +5,40 @@ const DailyMetrics = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    water: 0,
-    medication: false,
-    exercise: 0,
-    cigarettes: 0,
-    mood: 3,
-    symptoms: {
-      cough: false,
-      phlegm: false,
-      wheezing: false,
-      chestTightness: false,
-      shortnessOfBreath: false,
-    },
+    water: "",
+    medication: "",
+    exercise: "",
+    cigarettes: "",
+  });
+  const [customInputs, setCustomInputs] = useState({
+    water: "",
+    exercise: "",
+    cigarettes: "",
   });
 
-  const handleInputChange = (field, value) => {
+  const handleOptionSelect = (field, value) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
+    // 清空對應的自定義輸入
+    if (field !== "medication") {
+      setCustomInputs((prev) => ({
+        ...prev,
+        [field]: "",
+      }));
+    }
   };
 
-  const handleSymptomChange = (symptom) => {
+  const handleCustomInput = (field, value) => {
+    setCustomInputs((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+    // 清空對應的預設選項
     setFormData((prev) => ({
       ...prev,
-      symptoms: {
-        ...prev.symptoms,
-        [symptom]: !prev.symptoms[symptom],
-      },
+      [field]: "",
     }));
   };
 
@@ -41,8 +47,49 @@ const DailyMetrics = () => {
     setLoading(true);
 
     try {
-      // TODO: 整合 API 提交
-      console.log("提交每日健康數據:", formData);
+      // 驗證所有必填欄位
+      const finalData = {
+        water: customInputs.water || formData.water,
+        medication: formData.medication,
+        exercise: customInputs.exercise || formData.exercise,
+        cigarettes: customInputs.cigarettes || formData.cigarettes,
+      };
+
+      if (
+        !finalData.water ||
+        !finalData.medication ||
+        !finalData.exercise ||
+        !finalData.cigarettes
+      ) {
+        alert("請完成所有問題");
+        return;
+      }
+
+      // 轉換資料格式以符合後端 API 期望
+      const apiData = {
+        patient_id: getUserId() || 1, // 測試用預設 ID
+        water_cc: parseInt(finalData.water),
+        medication: finalData.medication === "是" ? true : false,
+        exercise_min: parseInt(finalData.exercise),
+        cigarettes: parseInt(finalData.cigarettes),
+      };
+
+      console.log("準備送出的資料:", apiData);
+
+      // 使用測試 API（無需認證）
+      const response = await fetch("/api/v1/patients/test/daily_metrics", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(apiData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
 
       // 顯示成功訊息
       const messageDiv = document.createElement("div");
@@ -63,6 +110,8 @@ const DailyMetrics = () => {
       document.body.appendChild(messageDiv);
       setTimeout(() => messageDiv.remove(), 3000);
 
+      console.log("Server 回應：", data);
+
       // 延遲後返回首頁
       setTimeout(() => {
         navigate("/liff");
@@ -72,7 +121,7 @@ const DailyMetrics = () => {
       // 顯示錯誤訊息
       const messageDiv = document.createElement("div");
       messageDiv.className = "error-message";
-      messageDiv.textContent = "提交失敗，請重試";
+      messageDiv.textContent = "送出失敗，請稍後再試";
       messageDiv.style.cssText = `
         position: fixed;
         top: 20px;
@@ -90,6 +139,12 @@ const DailyMetrics = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 測試用函數 - 實際使用時需要替換為真實的用戶認證
+  const getUserId = () => {
+    // 測試用：從 localStorage 獲取或使用預設值
+    return localStorage.getItem("patient_id") || 1;
   };
 
   return (
@@ -175,19 +230,62 @@ const DailyMetrics = () => {
           gap: 12px;
         }
 
-        .number-input {
-          width: 100px;
-          padding: 8px 12px;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          font-size: 16px;
-          text-align: center;
+        .option-buttons {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-bottom: 16px;
         }
 
-        .number-input:focus {
+        .option-btn {
+          min-height: 44px;
+          padding: 12px 16px;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          background: white;
+          color: #4b5563;
+          font-size: 16px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 200ms;
+          text-align: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .option-btn:hover {
+          border-color: #7cc6ff;
+          background: #f8faff;
+          transform: translateY(-1px);
+        }
+
+        .option-btn.selected {
+          background: #7cc6ff;
+          border-color: #5cb8ff;
+          color: white;
+          box-shadow: 0 4px 12px rgba(124, 198, 255, 0.3);
+        }
+
+        .custom-input {
+          width: 100%;
+          padding: 12px 16px;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          font-size: 16px;
+          background: white;
+          margin-top: 8px;
+        }
+
+        .custom-input:focus {
           outline: none;
           border-color: #7cc6ff;
           box-shadow: 0 0 0 3px rgba(124, 198, 255, 0.1);
+        }
+
+        .custom-input.has-value {
+          border-color: #7cc6ff;
+          background: #f8faff;
         }
 
         .unit {
@@ -195,114 +293,12 @@ const DailyMetrics = () => {
           font-size: 14px;
         }
 
-        .toggle-switch {
-          position: relative;
-          width: 48px;
-          height: 24px;
-          background: #e5e7eb;
-          border-radius: 12px;
-          cursor: pointer;
-          transition: background 200ms;
-        }
-
-        .toggle-switch.active {
-          background: #52c41a;
-        }
-
-        .toggle-switch::after {
-          content: "";
-          position: absolute;
-          top: 2px;
-          left: 2px;
-          width: 20px;
-          height: 20px;
-          background: white;
-          border-radius: 50%;
-          transition: transform 200ms;
-        }
-
-        .toggle-switch.active::after {
-          transform: translateX(24px);
-        }
-
-        .mood-selector {
-          display: flex;
-          gap: 12px;
-        }
-
-        .mood-option {
-          width: 48px;
-          height: 48px;
-          border: 2px solid transparent;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          cursor: pointer;
-          transition: all 200ms;
-        }
-
-        .mood-option:hover {
-          transform: scale(1.1);
-        }
-
-        .mood-option.selected {
-          border-color: #7cc6ff;
-          background: #e9f2ff;
-        }
-
-        .symptoms-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-
-        .symptom-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 200ms;
-        }
-
-        .symptom-item:hover {
-          background: #f9fafb;
-        }
-
-        .symptom-item.active {
-          background: #fee2e2;
-          border-color: #fecaca;
-        }
-
-        .checkbox {
-          width: 18px;
-          height: 18px;
-          border: 2px solid #d1d5db;
-          border-radius: 4px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 200ms;
-        }
-
-        .symptom-item.active .checkbox {
-          background: #ef4444;
-          border-color: #ef4444;
-        }
-
-        .symptom-item.active .checkbox::after {
-          content: "✓";
-          color: white;
-          font-size: 12px;
-        }
-
-        .symptom-label {
-          font-size: 14px;
-          color: #4b5563;
+        .question-text {
+          font-size: 20px;
+          font-weight: 600;
+          color: #2c3e50;
+          margin-bottom: 16px;
+          text-align: center;
         }
 
         .button-group {
@@ -352,12 +348,12 @@ const DailyMetrics = () => {
         }
 
         @media (max-width: 480px) {
-          .symptoms-grid {
+          .option-buttons {
             grid-template-columns: 1fr;
           }
 
-          .mood-selector {
-            justify-content: space-between;
+          .question-text {
+            font-size: 18px;
           }
         }
       `}</style>
@@ -370,133 +366,191 @@ const DailyMetrics = () => {
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* 基本指標 */}
+          {/* Q1: 飲水量 */}
           <div className="form-card">
-            <h2 className="section-title">
-              <span className="section-icon">💧</span>
-              基本健康指標
-            </h2>
-
-            <div className="form-group">
-              <label className="form-label">飲水量</label>
-              <div className="input-group">
-                <input
-                  type="number"
-                  className="number-input"
-                  value={formData.water}
-                  onChange={(e) =>
-                    handleInputChange("water", parseInt(e.target.value) || 0)
-                  }
-                  min="0"
-                  max="5000"
-                />
-                <span className="unit">毫升</span>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">運動時間</label>
-              <div className="input-group">
-                <input
-                  type="number"
-                  className="number-input"
-                  value={formData.exercise}
-                  onChange={(e) =>
-                    handleInputChange("exercise", parseInt(e.target.value) || 0)
-                  }
-                  min="0"
-                  max="300"
-                />
-                <span className="unit">分鐘</span>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">吸菸量</label>
-              <div className="input-group">
-                <input
-                  type="number"
-                  className="number-input"
-                  value={formData.cigarettes}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "cigarettes",
-                      parseInt(e.target.value) || 0
-                    )
-                  }
-                  min="0"
-                  max="100"
-                />
-                <span className="unit">支</span>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">今日已服藥</label>
-              <div
-                className={`toggle-switch ${
-                  formData.medication ? "active" : ""
+            <h2 className="question-text">你今天喝多少水（ml）？</h2>
+            <div className="option-buttons">
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.water === "500" ? "selected" : ""
                 }`}
-                onClick={() =>
-                  handleInputChange("medication", !formData.medication)
-                }
-              />
+                onClick={() => handleOptionSelect("water", "500")}
+              >
+                500ml
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.water === "1000" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("water", "1000")}
+              >
+                1000ml
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.water === "1500" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("water", "1500")}
+              >
+                1500ml
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.water === "2000" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("water", "2000")}
+              >
+                2000ml
+              </button>
+            </div>
+            <input
+              type="number"
+              className={`custom-input ${
+                customInputs.water ? "has-value" : ""
+              }`}
+              placeholder="手動輸入 (ml)"
+              value={customInputs.water}
+              onChange={(e) => handleCustomInput("water", e.target.value)}
+              min="0"
+              max="5000"
+            />
+          </div>
+
+          {/* Q2: 服藥 */}
+          <div className="form-card">
+            <h2 className="question-text">你今天吸藥了嗎？</h2>
+            <div className="option-buttons">
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.medication === "是" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("medication", "是")}
+              >
+                是
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.medication === "否" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("medication", "否")}
+              >
+                否
+              </button>
             </div>
           </div>
 
-          {/* 心情狀態 */}
+          {/* Q3: 運動時間 */}
           <div className="form-card">
-            <h2 className="section-title">
-              <span className="section-icon">😊</span>
-              今日心情
-            </h2>
-            <div className="mood-selector">
-              {[
-                { value: 1, emoji: "😔" },
-                { value: 2, emoji: "😐" },
-                { value: 3, emoji: "🙂" },
-                { value: 4, emoji: "😊" },
-                { value: 5, emoji: "😄" },
-              ].map((mood) => (
-                <div
-                  key={mood.value}
-                  className={`mood-option ${
-                    formData.mood === mood.value ? "selected" : ""
-                  }`}
-                  onClick={() => handleInputChange("mood", mood.value)}
-                >
-                  {mood.emoji}
-                </div>
-              ))}
+            <h2 className="question-text">你今天運動多久？</h2>
+            <div className="option-buttons">
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.exercise === "0" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("exercise", "0")}
+              >
+                0min (休息日)
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.exercise === "10" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("exercise", "10")}
+              >
+                10min
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.exercise === "20" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("exercise", "20")}
+              >
+                20min
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.exercise === "30" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("exercise", "30")}
+              >
+                30min
+              </button>
             </div>
+            <input
+              type="number"
+              className={`custom-input ${
+                customInputs.exercise ? "has-value" : ""
+              }`}
+              placeholder="手動輸入 (分鐘)"
+              value={customInputs.exercise}
+              onChange={(e) => handleCustomInput("exercise", e.target.value)}
+              min="0"
+              max="300"
+            />
           </div>
 
-          {/* 症狀記錄 */}
+          {/* Q4: 吸菸量 */}
           <div className="form-card">
-            <h2 className="section-title">
-              <span className="section-icon">🩺</span>
-              症狀記錄
-            </h2>
-            <div className="symptoms-grid">
-              {[
-                { key: "cough", label: "咳嗽" },
-                { key: "phlegm", label: "痰液" },
-                { key: "wheezing", label: "喘鳴" },
-                { key: "chestTightness", label: "胸悶" },
-                { key: "shortnessOfBreath", label: "呼吸困難" },
-              ].map((symptom) => (
-                <div
-                  key={symptom.key}
-                  className={`symptom-item ${
-                    formData.symptoms[symptom.key] ? "active" : ""
-                  }`}
-                  onClick={() => handleSymptomChange(symptom.key)}
-                >
-                  <div className="checkbox" />
-                  <span className="symptom-label">{symptom.label}</span>
-                </div>
-              ))}
+            <h2 className="question-text">今天抽了幾支菸？</h2>
+            <div className="option-buttons">
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.cigarettes === "0" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("cigarettes", "0")}
+              >
+                很棒沒抽
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.cigarettes === "5" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("cigarettes", "5")}
+              >
+                5支
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.cigarettes === "10" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("cigarettes", "10")}
+              >
+                10支（半包）
+              </button>
+              <button
+                type="button"
+                className={`option-btn ${
+                  formData.cigarettes === "20" ? "selected" : ""
+                }`}
+                onClick={() => handleOptionSelect("cigarettes", "20")}
+              >
+                20支（一包）
+              </button>
             </div>
+            <input
+              type="number"
+              className={`custom-input ${
+                customInputs.cigarettes ? "has-value" : ""
+              }`}
+              placeholder="手動輸入 (支)"
+              value={customInputs.cigarettes}
+              onChange={(e) => handleCustomInput("cigarettes", e.target.value)}
+              min="0"
+              max="100"
+            />
           </div>
 
           {/* 按鈕區 */}
@@ -514,7 +568,7 @@ const DailyMetrics = () => {
               disabled={loading}
             >
               <span>💾</span>
-              {loading ? "提交中..." : "儲存記錄"}
+              {loading ? "提交中..." : "送出紀錄"}
             </button>
           </div>
         </form>
