@@ -49,3 +49,7 @@ dist-ssr
 4_deployment
 design_templates
 seed_csv_output/
+web_dashboard/
+.cursorrules
+test_education_api.py
+EDUCATION_API_README.md

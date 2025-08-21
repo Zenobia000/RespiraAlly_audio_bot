@@ -11,7 +11,10 @@ from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
 from .api.chat import bp as chat_bp  # Explicitly import and alias the blueprint
 from .api.voice import bp as voice_bp  # Import voice API blueprint
+from .api.education import education_bp  # Import education API blueprint
+from .api.overview import overview_bp  # Import overview API blueprint
 from .core.notification_service import start_notification_listener
+from .middleware.error_handler import register_error_handlers
 
 # 從原本示範任務，改為引入實際排程任務（保留原檔案中的示範函式，不再註冊）
 from .core.scheduler_service import scheduled_task
@@ -57,24 +60,11 @@ def create_app(config_name="default"):
     app.register_blueprint(uploads_bp)
     app.register_blueprint(chat_bp)  # Register the aliased blueprint
     app.register_blueprint(voice_bp)  # Register the voice API blueprint
+    app.register_blueprint(education_bp)  # Register the education API blueprint
+    app.register_blueprint(overview_bp)  # Register the overview API blueprint
 
-    # 4. 註冊全域錯誤處理器
-    @app.errorhandler(404)
-    def not_found(error):
-        return jsonify({"error": "Not Found", "message": "您請求的資源不存在。"}), 404
-
-    @app.errorhandler(500)
-    def internal_error(error):
-        # 在實際應用中，這裡應該記錄錯誤
-        return (
-            jsonify(
-                {
-                    "error": "Internal Server Error",
-                    "message": "伺服器發生未預期的錯誤。",
-                }
-            ),
-            500,
-        )
+    # 4. 註冊統一的錯誤處理器
+    register_error_handlers(app)
 
     # 靜態檔案路由 - 服務 React 建置檔案
     @app.route('/static/dist/<path:filename>')

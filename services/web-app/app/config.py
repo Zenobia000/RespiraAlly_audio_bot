@@ -61,6 +61,12 @@ class Config:
     SCHEDULER_TIMEZONE = "Asia/Taipei"
 
     BASE_URL = os.getenv("BASE_URL")
+    
+    # Milvus 設定
+    MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
+    
+    # OpenAI 設定（用於 embedding）
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 class DevelopmentConfig(Config):

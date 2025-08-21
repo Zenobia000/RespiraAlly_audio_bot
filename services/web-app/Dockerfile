@@ -37,14 +37,17 @@ RUN npm run build -- --outDir ./dist
 # ===============================================
 # Stage 2: 建置 Python 後端
 # ===============================================
-FROM python:3.13 AS backend
+FROM python:3.11-slim AS backend
 
 # 設定工作目錄
 WORKDIR /usr/src/app
 
-# 安裝系統依賴
+# 安裝系統依賴（包含編譯工具）
 RUN apt-get update && apt-get install -y \
     curl \
+    build-essential \
+    python3-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # 複製後端代碼
