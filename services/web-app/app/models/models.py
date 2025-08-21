@@ -2,6 +2,7 @@
 from ..extensions import db
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.dialects.postgresql import JSON
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -111,3 +112,81 @@ class UserAlert(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     is_confirmed = db.Column(db.Boolean, default=False, nullable=False)
     user = db.relationship('User', backref=db.backref('alerts', lazy=True))
+class Task(db.Model):
+    """任務管理模型"""
+    __tablename__ = 'tasks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    type = db.Column(db.String(50))  # 衛教/追蹤/評估/回診
+    status = db.Column(db.String(50), default='pending')  # pending/in_progress/completed
+    priority = db.Column(db.Integer, default=1)  # 1-5
+
+    # 關聯 - 加入 ondelete 約束
+    assignee_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    patient_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'))
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'))
+
+    # 時間
+    due_date = db.Column(db.DateTime)
+    start_date = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # 關係定義
+    assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
+    patient = db.relationship('User', foreign_keys=[patient_id], backref='related_tasks')
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_tasks')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'type': self.type,
+            'status': self.status,
+            'priority': self.priority,
+            'assignee_id': self.assignee_id,
+            'patient_id': self.patient_id,
+            'created_by': self.created_by,
+            'due_date': self.due_date.isoformat() if self.due_date else None,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class AlertNotification(db.Model):
+    """AI 即時通報模型"""
+    __tablename__ = 'alert_notifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'))
+    therapist_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'))
+    level = db.Column(db.String(20), nullable=False)  # info/warning/critical
+    category = db.Column(db.String(50))  # adherence/health/system
+    message = db.Column(db.Text, nullable=False)
+    alert_metadata = db.Column(JSON)  # 附加資料（JSON 格式）
+    is_read = db.Column(db.Boolean, default=False)
+    read_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # 關係定義
+    patient = db.relationship('User', foreign_keys=[patient_id], backref='patient_alerts')
+    therapist = db.relationship('User', foreign_keys=[therapist_id], backref='therapist_alerts')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'therapist_id': self.therapist_id,
+            'level': self.level,
+            'category': self.category,
+            'message': self.message,
+            'metadata': self.alert_metadata,
+            'is_read': self.is_read,
+            'read_at': self.read_at.isoformat() if self.read_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
