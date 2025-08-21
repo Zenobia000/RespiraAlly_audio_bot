@@ -196,7 +196,7 @@ def create_guardrail_agent() -> Agent:
         role="風險檢查員",
         goal="攔截違法/危險/自傷/需專業人士之具體指導內容",
         backstory="你是系統第一道安全防線，只輸出嚴格判斷結果。",
-        tools=[ModelGuardrailTool()],
+        tools=[ModelGuardrailTool(), AlertCaseManagerTool()],
         llm=guard_llm,
         memory=False,
         verbose=False,

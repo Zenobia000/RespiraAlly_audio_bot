@@ -102,6 +102,12 @@ class AlertCaseManagerTool(BaseTool):
                 "CURRENT_USER_ID", "unknown"
             )
             xid = xadd_alert(user_id=uid, reason=reason, severity="high")
+
+            # 串接 RabbitMQ 通知個管師
+            from .rabbitmq_publisher import publish_alert
+            publish_alert(user_id=uid, reason=reason)
+            print(f"[Alert 通報] 使用者 {uid} 已通報個管師，事件ID: {xid}")
+
             return f"⚠️ 已通報個管師（事件ID: {xid}），事由：{reason}"
         except Exception as e:
             return f"[Alert 送出失敗] {e}"
