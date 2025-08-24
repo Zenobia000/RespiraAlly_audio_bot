@@ -1,32 +1,20 @@
 # -*- coding: utf-8 -*-
-# file: toolkits/memory_store.py
+# file: toolkits/memory_store.py  ← 直接用這份覆蓋
 import hashlib
 import math
 import os
 import time
-from typing import Any, Dict, List
-
-try:
-    from pymilvus import (
-        Collection,
-        CollectionSchema,
-        DataType,
-        FieldSchema,
-        connections,
-        utility,
-    )
-except Exception as e:
-    raise RuntimeError(
-        "需要 pymilvus，請先安裝並連上 Milvus：pip install pymilvus"
-    ) from e
+from typing import Any, Dict, List, Optional, Tuple
+from pymilvus import (
+    Collection, CollectionSchema, DataType, FieldSchema, connections, utility
+)
 
 EMBED_DIM = int(os.getenv("EMBED_DIM", 1536))  # text-embedding-3-small = 1536
 MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
-COLL = os.getenv("MEMORY_COLLECTION", "user_memory_v2")
+COLL = os.getenv("MEMORY_COLLECTION", "user_memory_v3")
 
-# P1-5: 緩存 collection 以避免重複 load
 _cached_collection = None
-_collection_loaded = False
+_loaded = False
 
 
 def _connect():
@@ -36,62 +24,75 @@ def _connect():
         connections.connect(alias="default", uri=MILVUS_URI)
 
 
-def ensure_memory_collection():
-    # P1-5: 緩存 collection 以避免重複 load
-    global _cached_collection, _collection_loaded
-    if _cached_collection and _collection_loaded:
-        return _cached_collection
+def _now_ms() -> int:
+    return int(time.time() * 1000)
 
+
+def _sha1(s: str) -> str:
+    return hashlib.sha1(s.encode("utf-8")).hexdigest()
+
+
+def _pk_for_atom(user_id: str, group_key: str) -> int:
+    h = hashlib.sha1(f"{user_id}|atom|{group_key}".encode()).digest()
+    return int.from_bytes(h[:8], "big", signed=False) & ((1 << 63) - 1)
+
+
+def _pk_for_surface(user_id: str, group_key: str, text: str) -> int:
+    # 每句 evidence 一個穩定 pk（text 取前 80 字避免過長）
+    h = hashlib.sha1(f"{user_id}|surface|{group_key}|{text[:80]}".encode()).digest()
+    return int.from_bytes(h[:8], "big", signed=False) & ((1 << 63) - 1)
+
+
+def _pk_for_rawqa(user_id: str, text: str) -> int:
+    h = hashlib.sha1(f"{user_id}|raw_qa|{text[:80]}".encode()).digest()
+    return int.from_bytes(h[:8], "big", signed=False) & ((1 << 63) - 1)
+
+
+def ensure_memory_collection() -> Collection:
+    global _cached_collection, _loaded
+    if _cached_collection and _loaded:
+        return _cached_collection
     _connect()
     if utility.has_collection(COLL):
         c = Collection(COLL)
-        # P1-7: 若 collection 已存在，回讀 dim，矯正 EMBED_DIM
+        # 對齊向量維度
         try:
-            schema = c.schema
-            for field in schema.fields:
-                if (
-                    field.name == "embedding"
-                    and hasattr(field, "params")
-                    and "dim" in field.params
-                ):
+            for f in c.schema.fields:
+                if f.name == "embedding" and hasattr(f, "params") and "dim" in f.params:
                     global EMBED_DIM
-                    actual_dim = field.params["dim"]
-                    if actual_dim != EMBED_DIM:
-                        print(f"⚠️ 矯正 EMBED_DIM: {EMBED_DIM} → {actual_dim}")
-                        EMBED_DIM = actual_dim
-        except Exception as e:
-            print(f"[dim correction error] {e}")
-
-        # 只在需要時才 load
-        if not _collection_loaded:
+                    if EMBED_DIM != f.params["dim"]:
+                        EMBED_DIM = f.params["dim"]
+                        print(f"⚠️ EMBED_DIM 校正為 {EMBED_DIM}")
+        except Exception:
+            pass
+        if not _loaded:
             try:
                 c.load()
-                _collection_loaded = True
+                _loaded = True
             except Exception:
                 pass
         _cached_collection = c
         return c
 
-    # 創建新 collection
+    # 新 schema：atom/surface/raw_qa + expire_at
     fields = [
         FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=False),
         FieldSchema(name="user_id", dtype=DataType.VARCHAR, max_length=64),
-        FieldSchema(name="type", dtype=DataType.VARCHAR, max_length=32),
-        FieldSchema(name="norm_key", dtype=DataType.VARCHAR, max_length=128),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=2048),
+        FieldSchema(name="type", dtype=DataType.VARCHAR, max_length=16),  # atom/surface/raw_qa
+        FieldSchema(name="group_key", dtype=DataType.VARCHAR, max_length=128),  # 自動 hash
+        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=4096),
         FieldSchema(name="importance", dtype=DataType.INT64),
         FieldSchema(name="confidence", dtype=DataType.FLOAT),
         FieldSchema(name="times_seen", dtype=DataType.INT64),
-        FieldSchema(
-            name="status", dtype=DataType.VARCHAR, max_length=16
-        ),  # active/superseded/archived
+        FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=16),  # active/archived/superseded
         FieldSchema(name="source_session_id", dtype=DataType.VARCHAR, max_length=64),
         FieldSchema(name="created_at", dtype=DataType.INT64),
         FieldSchema(name="updated_at", dtype=DataType.INT64),
         FieldSchema(name="last_used_at", dtype=DataType.INT64),
+        FieldSchema(name="expire_at", dtype=DataType.INT64),  # 0=永久
         FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=EMBED_DIM),
     ]
-    schema = CollectionSchema(fields, description="Personal long-term memory v2")
+    schema = CollectionSchema(fields, description="Personal long-term memory v3 (atom/surface/raw_qa)")
     c = Collection(COLL, schema=schema)
     c.create_index(
         field_name="embedding",
@@ -103,197 +104,216 @@ def ensure_memory_collection():
     )
     c.load()
     _cached_collection = c
-    _collection_loaded = True
+    _loaded = True
     return c
 
 
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _pk(user_id: str, type_: str, norm_key: str) -> int:
-    h = hashlib.sha1(f"{user_id}|{type_}|{norm_key}".encode()).digest()
-    return int.from_bytes(h[:8], "big", signed=False) & ((1 << 63) - 1)
-
-
-def _recency_weight(updated_at_ms: int, tau_days: int = 45) -> float:
-    if not updated_at_ms:
-        return 0.0
-    delta_days = max(0.0, (time.time() * 1000 - updated_at_ms) / 86400000.0)
-    return math.exp(-delta_days / float(tau_days))
-
-
-def upsert_memory_atoms(user_id: str, atoms: List[Dict[str, Any]]):
+def upsert_atoms_and_surfaces(user_id: str, items: List[Dict[str, Any]]) -> int:
     """
-    Upsert 記憶原子（同 user_id+type+norm_key 覆寫更新）。
-    atoms 需包含：type, norm_key, text, importance, confidence, times_seen, status, source_session_id, embedding
+    items: 每筆必含 type in {'atom','surface','raw_qa'}, text, （可選）group_key, importance, confidence,
+           times_seen, status, source_session_id, created_at/updated_at/last_used_at, expire_at, embedding
+    - atom: 建議 embedding 可省略（None/[]），需要時可加備援
+    - surface/raw_qa: 必須有 embedding（用原句向量）
     """
-    if not atoms:
+    if not items:
         return 0
     c = ensure_memory_collection()
     now = _now_ms()
-    rows = {
-        "pk": [],
-        "user_id": [],
-        "type": [],
-        "norm_key": [],
-        "text": [],
-        "importance": [],
-        "confidence": [],
-        "times_seen": [],
-        "status": [],
-        "source_session_id": [],
-        "created_at": [],
-        "updated_at": [],
-        "last_used_at": [],
-        "embedding": [],
-    }
-    for a in atoms:
-        t = (a.get("type") or "other")[:32]
-        nk = (a.get("norm_key") or "").strip()[:128]
-        if not nk:
-            nk = (
-                "auto:"
-                + hashlib.sha1((a.get("text", "")[:64]).encode()).hexdigest()[:24]
-            )
-        pk = _pk(user_id, t, nk)
+    rows = {k: [] for k in [
+        "pk","user_id","type","group_key","text","importance","confidence","times_seen",
+        "status","source_session_id","created_at","updated_at","last_used_at","expire_at","embedding"
+    ]}
+    for a in items:
+        t = a.get("type")
+        if t not in ("atom","surface","raw_qa"):
+            raise ValueError("type 必須為 atom/surface/raw_qa")
+        text = (a.get("text") or "")[:4000]
+        gk = (a.get("group_key") or "")
+        if t == "atom":
+            # 未提供 group_key 時，直接用展示文本 hash 做穩定鍵
+            gk = gk or ("auto:" + _sha1(text.lower())[:32])
+            pk = _pk_for_atom(user_id, gk)
+        elif t == "surface":
+            if not gk:
+                raise ValueError("surface 需要 group_key（對齊對應 atom）")
+            pk = _pk_for_surface(user_id, gk, text)
+        else:  # raw_qa
+            pk = _pk_for_rawqa(user_id, text)
+
+        emb = a.get("embedding") or []
+        if t != "atom":
+            # surface/raw_qa 一定要有 embedding
+            if not isinstance(emb, list) or len(emb) != EMBED_DIM:
+                raise ValueError(f"{t} 需要 embedding（dim={EMBED_DIM}）")
+        else:
+            # atom 若沒 embedding 可以塞空向量（Milvus 要求維度一致；這裡給全 0 做 placeholder）
+            if not emb or len(emb) != EMBED_DIM:
+                emb = [0.0] * EMBED_DIM
+
         rows["pk"].append(pk)
         rows["user_id"].append(user_id)
         rows["type"].append(t)
-        rows["norm_key"].append(nk)
-        rows["text"].append((a.get("text", "")[:2000]))
+        rows["group_key"].append(gk)
+        rows["text"].append(text)
         rows["importance"].append(int(a.get("importance", 3)))
-        rows["confidence"].append(float(a.get("confidence", 0.7)))
+        rows["confidence"].append(float(a.get("confidence", 0.9 if t=="surface" else 0.8)))
         rows["times_seen"].append(int(a.get("times_seen", 1)))
-        rows["status"].append(a.get("status", "active"))
-        rows["source_session_id"].append(a.get("source_session_id", ""))
+        rows["status"].append(a.get("status","active"))
+        rows["source_session_id"].append(a.get("source_session_id",""))
         rows["created_at"].append(int(a.get("created_at", now)))
         rows["updated_at"].append(int(a.get("updated_at", now)))
         rows["last_used_at"].append(int(a.get("last_used_at", now)))
-        emb = a.get("embedding") or []
-        if not isinstance(emb, list) or len(emb) != EMBED_DIM:
-            raise ValueError(f"embedding 維度錯誤，需 {EMBED_DIM}")
+        rows["expire_at"].append(int(a.get("expire_at", 0)))
         rows["embedding"].append(emb)
-    c.upsert(
-        [
-            rows["pk"],
-            rows["user_id"],
-            rows["type"],
-            rows["norm_key"],
-            rows["text"],
-            rows["importance"],
-            rows["confidence"],
-            rows["times_seen"],
-            rows["status"],
-            rows["source_session_id"],
-            rows["created_at"],
-            rows["updated_at"],
-            rows["last_used_at"],
-            rows["embedding"],
-        ]
-    )
+
+    c.upsert([rows[k] for k in [
+        "pk","user_id","type","group_key","text","importance","confidence","times_seen",
+        "status","source_session_id","created_at","updated_at","last_used_at","expire_at","embedding"
+    ]])
     return len(rows["pk"])
 
 
-def _score(hit, sim_weight=0.64, tau_days=45):
-    sim = float(getattr(hit, "distance", 0.0))  # COSINE：越大越相似
-    e = hit.entity
-    # P0-2: 使用 last_used_at 而非 updated_at 計算新鮮度
-    last_used = int(e.get("last_used_at") or e.get("updated_at") or 0)
-    rec = _recency_weight(last_used, tau_days)
-    imp = (int(e.get("importance") or 3)) / 5.0
-    freq = min(1.0, (int(e.get("times_seen") or 1)) / 5.0)
-    return sim_weight * sim + 0.18 * rec + 0.12 * imp + 0.06 * freq
+def _recency_weight(ts_ms: int, tau_days: int = 45) -> float:
+    if not ts_ms:
+        return 0.0
+    delta_days = max(0.0, (time.time() * 1000 - ts_ms) / 86400000.0)
+    return math.exp(-delta_days / float(tau_days))
 
 
-def retrieve_memory_pack(
-    user_id: str,
-    query_vec: List[float],
-    topk: int = 5,
-    sim_thr: float = 0.78,
-    tau_days: int = 45,
+def retrieve_memory_pack_v3(
+    user_id: str, query_vec: List[float], topk_groups: int = 5,
+    sim_thr: Optional[float] = None, tau_days: int = 45, include_raw_qa: bool = False
 ) -> str:
-    """
-    回傳可直接塞進 prompt 的 Top‑K 記憶包字串。命中不足則回空字串。
-    P0-2: 命中後更新 times_seen 與 last_used_at
-    """
     c = ensure_memory_collection()
-    # P1-5: 移除重複 load，已在 ensure_memory_collection() 中處理
-    expr = f'user_id == "{user_id}" and status == "active"'
+    now = _now_ms()
+
+    # 門檻可由環境變數覆蓋；若傳入為 None 則讀 ENV，預設 0.38
+    sim_thr = float(os.getenv("MEM_SIM_THR", "0.5")) if (sim_thr is None) else float(sim_thr)
+
+    # ✅ Milvus 的 in 子句需使用方括號
+    type_filter = '["surface","atom"]' if not include_raw_qa else '["surface","atom","raw_qa"]'
+    expr = (
+        f'user_id == "{user_id}" and status == "active" and '
+        f'(expire_at == 0 or expire_at >= {now}) and type in {type_filter}'
+    )
+
     res = c.search(
         data=[query_vec],
         anns_field="embedding",
         param={"metric_type": "COSINE", "params": {"ef": 128}},
-        limit=min(20, max(5, topk * 4)),
+        limit=50,
         expr=expr,
-        output_fields=["pk"],  # 只取 pk
+        output_fields=["pk","type","group_key","text","importance","times_seen","last_used_at"]
     )
-    hits = [h for h in res[0] if float(getattr(h, "distance", 0.0)) >= sim_thr]
-    print(f"🔍 記憶檢索結果: 共找到 {len(res[0])} 筆候選，{len(hits)} 筆超過門檻 {sim_thr}")
-    if res[0]:
-        similarities = [f'{float(getattr(h, "distance", 0.0)):.3f}' for h in res[0][:3]]
-        print(f"📊 相似度分佈: {similarities}")
+
+    def _score_of(h):
+        return float(getattr(h, "distance", getattr(h, "score", 0.0)))
+
+    hits = [h for h in res[0] if _score_of(h) >= sim_thr]
+    # 命中為空時，就地放寬一次（不重打 DB）
+    if not hits and res and len(res[0]) > 0:
+        relax_thr = max(0.30, sim_thr * 0.7)
+        hits = [h for h in res[0] if _score_of(h) >= relax_thr]
+
     if not hits:
         return ""
 
-    # 取全欄位（pk 去重）
-    pk_list = list({h.entity.get("pk") for h in hits if h.entity.get("pk") is not None})
-    if not pk_list:
-        return ""
-    # Milvus query 支援 in 語法
-    pk_expr = f"pk in [{','.join(str(pk) for pk in pk_list)}]"
-    full_rows = c.query(expr=pk_expr, output_fields=None)  # None 取全部欄位
-    pk2row = {row["pk"]: row for row in full_rows}
-
-    # 同 norm_key 去重：保留分數最高
-    best_by_key = {}
+    # 以 group_key 聚合；surface 命中權重較高
+    buckets: Dict[str, Dict[str, Any]] = {}
     for h in hits:
-        pk = h.entity.get("pk")
-        e = pk2row.get(pk)
-        if not e:
-            continue
-        key = f'{e.get("type")}#{e.get("norm_key")}'
-        s = _score(h, tau_days=tau_days)
-        if (key not in best_by_key) or (s > best_by_key[key]["score"]):
-            best_by_key[key] = {"hit": h, "score": s, "row": e}
+        e = h.entity
+        gk = e.get("group_key") or "rawqa:"+_sha1(e.get("text") or "")
+        t = e.get("type")
+        sim = _score_of(h)
+        rec = _recency_weight(int(e.get("last_used_at") or 0), tau_days)
+        imp = (int(e.get("importance") or 3))/5.0
+        base = 0.64*sim + 0.18*rec + 0.12*imp
+        bonus = 0.05 if t == "surface" else 0.0
+        score = base + bonus
+        b = buckets.setdefault(gk, {"score":-1,"best_surface":None,"best_atom":None})
+        if score > b["score"]:
+            b["score"] = score
+        if t == "surface" and (b["best_surface"] is None):
+            b["best_surface"] = e
+        if t == "atom":
+            b["best_atom"] = e
 
-    picked = sorted(best_by_key.values(), key=lambda x: x["score"], reverse=True)[:topk]
+    order = sorted(buckets.items(), key=lambda kv: kv[1]["score"], reverse=True)[:max(1,topk_groups)]
 
-    # P0-2: 更新命中記憶的使用統計
-    if picked:
-        try:
-            now = _now_ms()
-            for item in picked:
-                e = item["row"]
+    lines = []
+    update_rows = []
+    for gk, info in order:
+        atom = info["best_atom"]
+        surf = info["best_surface"]
+        if atom is not None:
+            lines.append(f'- {atom.get("text")}')
+            update_rows.append(("atom", atom))
+        elif surf is not None:
+            lines.append(f'- {surf.get("text")}（原話）')
+            update_rows.append(("surface", surf))
+
+    # ✅ 命中統計：顯式帶出需要的欄位，避免 'user_id' KeyError
+    try:
+        if update_rows:
+            for t, e in update_rows:
                 pk = e.get("pk")
-                if pk:
-                    new_times_seen = int(e.get("times_seen", 1)) + 1
-                    original_embedding = e.get("embedding")
-                    if original_embedding is None:
-                        print(
-                            f"[warning] missing embedding for pk={pk}, skipping update"
-                        )
-                        continue
-                    c.upsert(
-                        [
-                            [pk],
-                            [e.get("user_id")],
-                            [e.get("type")],
-                            [e.get("norm_key")],
-                            [e.get("text")],
-                            [e.get("importance")],
-                            [e.get("confidence")],
-                            [new_times_seen],
-                            [e.get("status")],
-                            [e.get("source_session_id")],
-                            [e.get("created_at")],
-                            [e.get("updated_at")],
-                            [now],
-                            [original_embedding],
-                        ]
-                    )
-        except Exception as ex:
-            print(f"[memory usage update error] {ex}")
+                if not pk:
+                    continue
+                full = c.query(
+                    expr=f"pk in [{pk}]",
+                    output_fields=[
+                        "pk","user_id","type","group_key","text","importance","confidence",
+                        "times_seen","status","source_session_id","created_at","updated_at",
+                        "last_used_at","expire_at","embedding",
+                    ],
+                )
+                if not full:
+                    continue
+                row = full[0]
+                c.upsert([[row["pk"]],[row["user_id"]],[row["type"]],[row["group_key"]],
+                          [row["text"]],[row["importance"]],[row["confidence"]],
+                          [int(row.get("times_seen",1))+1],[row["status"]],
+                          [row["source_session_id"]],[row["created_at"]],
+                          [_now_ms()],[ _now_ms() ],[row.get("expire_at",0)],[row["embedding"]]])
+    except Exception as ex:
+        print(f"[usage update warn] {ex}")
 
-    lines = [f'- {x["row"].get("text")} ' for x in picked]
     return "⭐ 個人長期記憶：\n" + "\n".join(lines) if lines else ""
+
+
+
+def gc_expired(user_id: Optional[str] = None, hard_delete: bool = False) -> int:
+    """封存或刪除過期記憶；回傳影響筆數（估算）。"""
+    c = ensure_memory_collection()
+    now = _now_ms()
+    base = f'(expire_at != 0 and expire_at < {now})'
+    if user_id:
+        base = f'user_id == "{user_id}" and ' + base
+    rows = c.query(expr=base, output_fields=["pk"])
+    if not rows:
+        return 0
+    pks = ",".join(str(r["pk"]) for r in rows)
+    if hard_delete:
+        c.delete(expr=f"pk in [{pks}]")
+    else:
+        # 軟封存：狀態變 archived（仍保留資料）
+        full = c.query(expr=f"pk in [{pks}]", output_fields=None)
+        if full:
+            c.upsert([
+                [r["pk"] for r in full],
+                [r["user_id"] for r in full],
+                [r["type"] for r in full],
+                [r["group_key"] for r in full],
+                [r["text"] for r in full],
+                [r["importance"] for r in full],
+                [r["confidence"] for r in full],
+                [r["times_seen"] for r in full],
+                ["archived"] * len(full),
+                [r["source_session_id"] for r in full],
+                [r["created_at"] for r in full],
+                [_now_ms()] * len(full),
+                [r["last_used_at"] for r in full],
+                [r["expire_at"] for r in full],
+                [r["embedding"] for r in full],
+            ])
+    return len(rows or [])

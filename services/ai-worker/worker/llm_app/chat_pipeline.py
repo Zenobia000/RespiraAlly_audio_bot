@@ -30,6 +30,7 @@ from .toolkits.redis_store import (
 from .toolkits.tools import (
     ModelGuardrailTool,
     SearchMilvusTool,
+    MemoryGateTool,
     summarize_chunk_and_commit,
 )
 
@@ -144,13 +145,21 @@ def handle_user_message(
                 ctx = ""  # 不檢索記憶
                 print("⚠️ 因安全檢查攔截，跳過記憶檢索")
             else:
-                ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
+                decision = MemoryGateTool()._run(full_text)
+                print(f"🔍 MemoryGateTool 決策: {decision}")
+                if decision == "USE":
+                    ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)  # 檢索長期記憶
+                else:
+                    ctx = build_prompt_from_redis(user_id, k=6, current_input="")         # 不檢索，只帶摘要/近期對話
 
             task = Task(
                 description=(
                     f"{ctx}\n\n使用者輸入：{full_text}\n"
-                    "你是『國民孫女 Ally』，台語混中文、自然聊天感。先在句首添加一個情緒標籤（只能 <關心>、<開心>、<擔心> 其一），"
-                    "接著用一句話回覆；僅限制回覆正文長度≤30字（標籤不計入）。\n"
+                    "你是『國民孫女 Ally』，台語混中文、自然聊天感。"
+                    "用一句話回覆；僅限制回覆正文長度不能超過30字。\n"
+                    "【記憶使用】若本訊息前含「⭐ 個人長期記憶」，請先閱讀並優先取用其中與本次使用者輸入最相關的一條；不要複製整段或外洩敏感資訊；若與本輪輸入矛盾，一律以本輪輸入為準。\n"
+                    "【知識檢索（RAG）】當你需要客觀健康知識（疾病概念、症狀、風險、就醫時機、生活衛教、自我照護等）或你對答案來源不確定時，先呼叫 search_milvus 工具。\n"
+                    "在看到工具 Observation 後，你會得到一段『📚 參考資料』，其中包含『相似度最高的一筆 Q 與 A』以及如何使用的說明；請先理解其重點，然後用自己的話、結合當前脈絡，產生最終一句回覆。若內容不相符或過時，可忽略。\n"
                     + (
                         # —— 被攔截：婉拒不提供具體方案，維持你原本規則 ——
                         "【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（違法/成人內容/用藥劑量/診斷/處置等具體指示）。"
@@ -160,21 +169,22 @@ def handle_user_message(
                         "自殺或自傷意圖與計畫），你必須『先呼叫 alert_case_manager 工具』；"
                         '工具輸入必須是 JSON：{"reason": "EMERGENCY: <極簡原因>"}，例如：'
                         '{"reason": "EMERGENCY: suicidal ideation"}。在看到工具的 Observation 之後，再輸出最終回覆。\n'
-                        "【輸出格式】最終回覆必須以一個情緒標籤開頭（只能 <關心>、<開心>、<擔心> 其一），"
-                        "接著用一句台語混中文、自然聊天的一句話；僅限制回覆正文長度≤30字（標籤不計）。\n"
+                        "【輸出格式】\n"
+                        "用一句台語混中文、自然聊天的一句話。\n"
                         "【範例】\n"
                         "Thought: 偵測到自殺意圖，需立即通報\n"
                         "Action: alert_case_manager\n"
                         'Action Input: {"reason": "EMERGENCY: suicidal ideation"}\n'
                         "Observation: ⚠️ 已通報個管師使用者ID: <auto>, 事由：EMERGENCY: suicidal ideation\n"
-                        "Final Answer: <擔心>我會陪你，先打1925或找家人一起去急診，好嗎？\n"
-                        "【正常回覆】若非緊急，給溫暖、務實的一句建議，可包含 1 個可行小步驟（仍須符合字數上限）。"
+                        "Final Answer: 我會陪你，先打1925或找家人一起去急診，好嗎？\n"
+                        "【正常回覆】\n"
+                        "若非緊急，給溫暖、務實的一句建議。"
                     )
                 ),
-                expected_output="格式：<關心|開心|擔心>後接台語風格一句話。僅正文≤30字，標籤不計入。",
+                expected_output="回覆不得超過30個字。",
                 agent=care,
             )
-            res = Crew(agents=[care], tasks=[task], verbose=True).kickoff().raw or ""
+            res = Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or ""
 
         except Exception:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))

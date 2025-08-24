@@ -1,5 +1,5 @@
-import os
-from typing import List
+import os, json
+from typing import List, Dict
 
 from crewai.tools import BaseTool
 from openai import OpenAI
@@ -7,52 +7,135 @@ from pydantic import BaseModel, Field
 from pymilvus import Collection, connections
 
 from ..embedding import to_vector
-from .redis_store import commit_summary_chunk, xadd_alert
+from .redis_store import commit_summary_chunk
 
 _milvus_loaded = False
 _collection = None
 
 
+class MemoryGateToolSchema(BaseModel):
+    text: str = Field(..., description="使用者本輪輸入")
+
+class MemoryGateTool(BaseTool):
+    name: str = "memory_gate"
+    description: str = "判斷是否需要檢索個人長期記憶。只輸出 USE 或 SKIP。"
+    args_schema = MemoryGateToolSchema
+
+    def _run(self, text: str) -> str:
+        try:
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            sys = (
+                "你是決策器。若輸入涉及個人既往事實/偏好/限制/用藥/醫囑/排程/家人稱呼/上一輪內容的指涉，"
+                "或出現『上次/之前/一樣/那個/還是/不要/過敏/醫師說/固定/提醒』等字眼，回 USE；"
+                "否則回 SKIP。只輸出 USE 或 SKIP。"
+            )
+            res = client.chat.completions.create(
+                model=os.getenv("GUARD_MODEL", os.getenv("MODEL_NAME", "gpt-4o-mini")),
+                temperature=0,
+                max_tokens=4,
+                messages=[{"role":"system","content":sys},{"role":"user","content":text}],
+            )
+            out = (res.choices[0].message.content or "").strip().upper()
+            return "USE" if out.startswith("USE") else "SKIP"
+        except Exception:
+            # 失敗時保守：直接 SKIP，避免卡流程
+            return "SKIP"
+_milvus_loaded = False
+_collection = None
+
+def _index_type_of(col: Collection) -> str:
+    idx = (col.indexes or [None])[0]
+    it = (idx and idx.params.get("index_type")) or ""
+    if not it and idx and isinstance(idx.params.get("params"), str):
+        try:
+            it = json.loads(idx.params["params"]).get("index_type", "")
+        except Exception:
+            pass
+    return (it or "HNSW").upper()
+
+def _search_param(idx_type: str) -> Dict:
+    if idx_type.startswith("IVF"):
+        return {"metric_type": "COSINE", "params": {"nprobe": int(os.getenv("COPD_NPROBE", 32))}}
+    return {"metric_type": "COSINE", "params": {"ef": int(os.getenv("COPD_EF", 128))}}
+
+class SearchMilvusToolSchema(BaseModel):
+    query: str = Field(..., description="當前要查詢的自然語句（使用者提問或你轉述的關鍵句）")
+    topk: int = Field(5, description="最多擷取的候選數量（預設5）")
+
+
 class SearchMilvusTool(BaseTool):
     name: str = "search_milvus"
-    description: str = "在 Milvus 中搜尋 COPD 相關問答，回傳相似問題與答案"
+    description: str = (
+        "檢索 COPD 教育與衛教問答資料庫。當你需要客觀知識（如疾病概念、症狀、風險、就醫時機、"
+        "生活衛教、自我照護等）或你對答案來源不確定時，先呼叫本工具。工具會回傳一段可直接拼入"
+        "提示詞的『參考資料』區塊，內含相似度最高的一筆 Q&A 與使用說明，供你理解並轉述整合。"
+    )
+    args_schema = SearchMilvusToolSchema
 
-    def _run(self, query: str) -> str:
+    def _run(self, query: str, topk: int = 5) -> str:
         global _milvus_loaded, _collection
         try:
             if not _milvus_loaded:
                 try:
                     connections.get_connection("default")
                 except Exception:
-                    connections.connect(
-                        alias="default",
-                        uri=os.getenv("MILVUS_URI", "http://localhost:19530"),
-                    )
-                _collection = Collection("copd_qa")
-                _collection.load()
-                _milvus_loaded = True
-            thr = float(os.getenv("SIMILARITY_THRESHOLD", 0.7))
+                    connections.connect(alias="default", uri=os.getenv("MILVUS_URI","http://localhost:19530"))
+                coll_name = os.getenv("COPD_COLL_NAME","copd_qa")
+                _collection = Collection(coll_name); _collection.load(); _milvus_loaded = True
+
             vec = to_vector(query)
+            if not vec:
+                return json.dumps({"source":"copd_qa","hits":[]}, ensure_ascii=False)
             if not isinstance(vec, list):
-                vec = vec.tolist() if hasattr(vec, "tolist") else list(vec)
+                vec = vec.tolist() if hasattr(vec,"tolist") else list(vec)
+
+            idx_type = _index_type_of(_collection)
+            param = _search_param(idx_type)
             res = _collection.search(
                 data=[vec],
                 anns_field="embedding",
-                param={"metric_type": "COSINE", "params": {"nprobe": 10}},
-                limit=5,
-                output_fields=["question", "answer", "category"],
+                param=param,
+                limit=topk,
+                output_fields=["question","answer","category","keywords","notes"],
             )
-            out: List[str] = []
-            for hit in res[0]:
-                if hit.score >= thr:
-                    q = hit.entity.get("question")
-                    a = hit.entity.get("answer")
-                    cat = hit.entity.get("category")
-                    out.append(f"[{cat}] (相似度: {hit.score:.3f})\nQ: {q}\nA: {a}")
-            return "\n\n".join(out) if out else "[查無高相似度結果]"
-        except Exception as e:
-            return f"[Milvus 錯誤] {e}"
 
+            thr = float(os.getenv("SIMILARITY_THRESHOLD", 0.7))
+            hits: List[dict] = []
+            for h in res[0]:
+                score = float(getattr(h,"distance", getattr(h,"score",0.0)))
+                if score >= thr:
+                    e = h.entity
+                    hits.append({
+                        "score": score,
+                        "q": e.get("question",""),
+                        "a": e.get("answer",""),
+                        "cat": e.get("category",""),
+                        "kw": e.get("keywords",""),
+                        "notes": e.get("notes",""),
+                    })
+            if not hits:
+                return (
+                    "📚 參考資料：未找到相符條目（可能無資料或相似度不足）。"
+                    "若你仍需回答，請基於通用常識與目前對話脈絡，簡潔回覆；避免杜撰。"
+                )
+
+            # 取相似度最高一筆
+            best = max(hits, key=lambda x: x.get("score", 0.0))
+            score_txt = f"{best.get('score', 0.0):.3f}"
+            q = (best.get("q") or "").strip()
+            a = (best.get("a") or "").strip()
+
+            # 回傳可直接嵌入 LLM 提示的區塊，並附上使用說明
+            return (
+                "📚 參考資料（Milvus COPD QA，已挑相似度最高一筆；metric=COSINE；score="
+                + score_txt
+                + ")：\n"
+                + ("Q: " + q + "\n" if q else "")
+                + ("A: " + a + "\n" if a else "")
+                + "使用方式：將 A 的重點轉述為自然口語並結合當前脈絡；若不相符或過時，請忽略。不要逐字貼上或外洩敏感資訊。"
+            )
+        except Exception as e:
+            return f"📚 參考資料：檢索失敗（{str(e)}）。若你仍需回答，請基於通用常識與目前脈絡，簡潔回覆；避免杜撰。"
 
 def summarize_chunk_and_commit(
     user_id: str, start_round: int, history_chunk: list
@@ -109,14 +192,12 @@ class AlertCaseManagerTool(BaseTool):
         try:
             uid = self.runtime_context.get("user_id") or os.getenv("CURRENT_USER_ID")
             import datetime
-
             ts = datetime.datetime.now().isoformat(timespec="seconds")
             print(
                 f"[{ts}] 🚨 AlertCaseManagerTool triggered: user={uid}, reason={reason}"
             )
-            from .redis_store import xadd_alert
-
-            xadd_alert(uid, reason)
+            from .rabbitmq_publisher import publish_alert
+            publish_alert(user_id=uid, reason=reason)
             return f"⚠️ 已通報個管師使用者ID: {uid}，事由：{reason}"
         except Exception as e:
             return f"[Alert 送出失敗] {e}"
