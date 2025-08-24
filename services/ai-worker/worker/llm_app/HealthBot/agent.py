@@ -1,21 +1,20 @@
+import hashlib
+import json
 import os
-
-# 禁用 CrewAI 遙測功能（避免連接錯誤）
-os.environ["OTEL_SDK_DISABLED"] = "true"
-os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
-
 import time
+from typing import Any, Dict, List
 
 from crewai import LLM, Agent
 from openai import OpenAI
 
+# ---- 專案模組（注意相對匯入）----
 from ..embedding import safe_to_vector
-from ..toolkits.memory_store import retrieve_memory_pack, upsert_memory_atoms
+from ..toolkits.memory_store import retrieve_memory_pack_v3, upsert_atoms_and_surfaces
+
+# redis 與工具：注意 summarize_chunk_and_commit 來自 tools.py
 from ..toolkits.redis_store import (
     fetch_all_history,
-    fetch_unsummarized_tail,
     get_summary,
-    peek_next_n,
     peek_remaining,
     purge_user_session,
     set_state_if,
@@ -27,373 +26,275 @@ from ..toolkits.tools import (
     summarize_chunk_and_commit,
 )
 
-STM_MAX_CHARS = int(os.getenv("STM_MAX_CHARS", 1800))
-SUMMARY_MAX_CHARS = int(os.getenv("SUMMARY_MAX_CHARS", 3000))
-REFINE_CHUNK_ROUNDS = int(os.getenv("REFINE_CHUNK_ROUNDS", 20))
-SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", 5))
-
-
-# 對話用的溫度（口語更自然可高一點）
-_reply_temp = float(os.getenv("REPLY_TEMPERATURE", "0.8"))
-# Guardrail 建議 0 或很低
-_guard_temp = float(os.getenv("GUARD_TEMPERATURE", "0.0"))
+OPENAI_MODEL = os.getenv("MODEL_NAME", "gpt-4o-mini")
+EMBED_DIM = int(os.getenv("EMBED_DIM", 1536))
 
 granddaughter_llm = LLM(
     model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-    temperature=_reply_temp,
+    temperature=0.5,
 )
 
 guard_llm = LLM(
     model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-    temperature=_guard_temp,
+    temperature=0,
 )
 
 
-def _shrink_tail(text: str, max_chars: int) -> str:
-    if len(text) <= max_chars:
-        return text
-    tail = text[-max_chars:]
-    idx = tail.find("--- ")
-    return tail[idx:] if idx != -1 else tail
+# ========= 小工具 =========
+def _now_ms() -> int:
+    return int(time.time() * 1000)
 
 
+def _stable_group_key(display_text: str) -> str:
+    # 以展示文本（atom 的可讀敘述）為基準做 hash，確保 atom/surface 用同一把 gk
+    h = hashlib.sha1(display_text.lower().encode("utf-8")).hexdigest()[:32]
+    return "auto:" + h
+
+
+def _render_session_transcript(user_id: str, k: int = 9999) -> str:
+    rounds = fetch_all_history(user_id) or []
+    out = []
+    for i, r in enumerate(rounds[-k:], 1):
+        q = (r.get("input") or "").strip()
+        a = (r.get("output") or "").strip()
+        out.append(f"{i:02d}. 使用者：{q}")
+        out.append(f"    助手：{a}")
+    return "\n".join(out)
+
+
+# ========= Finalize：記憶蒸餾 =========
+_DISTILL_SYS = """
+你是「記憶蒸餾器」。請從本輪對話中，只抽取『可長期重用的既定事實』，並為每一項指定保存期限（TTL）。
+抽取規則（務必遵守）：
+- 只收：過敏史、固定偏好、醫囑/用藥（現行）、固定行程/提醒、聯絡人、慢性病史、長期限制/禁忌。
+- 不收：寒暄、一次性事件、短期症狀、猜測、模型意見。
+- 每項提供 60–160 字可讀敘述（display_text），不得添加未出現的推測。
+- 每項附 1–3 句【evidence 原話】（逐字引用使用者或助手話語），之後將以此做向量檢索。
+- TTL 規則：
+  allergy/慢性病/聯絡人：ttl_days=0（永久）
+  醫囑/用藥：ttl_days=180
+  固定偏好：ttl_days=365
+  固定行程/提醒：ttl_days=90
+  其他長期限制/禁忌：ttl_days=365
+- 若無符合，輸出空陣列 []。
+輸出 JSON 陣列，元素格式：
+{
+  "type": "allergy|preference|doctor_order|schedule|reminder|contact|condition|constraint|note",
+  "display_text": "<60-160字可讀敘述>",
+  "evidence": ["<原話1>", "<原話2>"],  // 最多3句
+  "ttl_days": 0|90|180|365
+}
+""".strip()
+
+
+def _distill_facts(user_id: str) -> List[Dict[str, Any]]:
+    transcript = _render_session_transcript(user_id)
+    if not transcript.strip():
+        return []
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    res = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        temperature=0.2,
+        max_tokens=900,
+        messages=[
+            {"role": "system", "content": _DISTILL_SYS},
+            {
+                "role": "user",
+                "content": f"使用者本輪對話如下（逐字）：\n<<<\n{transcript}\n>>>",
+            },
+        ],
+    )
+    raw = (res.choices[0].message.content or "").strip()
+    # 清掉 ```json 區塊符號
+    if raw.startswith("```"):
+        lines = [ln for ln in raw.splitlines() if not ln.strip().startswith("```")]
+        raw = "\n".join(lines).strip()
+    lb, rb = raw.find("["), raw.rfind("]")
+    if lb == -1 or rb == -1 or rb <= lb:
+        return []
+    try:
+        arr = json.loads(raw[lb : rb + 1])
+        return arr if isinstance(arr, list) else [arr]
+    except Exception:
+        return []
+
+
+def _ttl_days_to_expire_at(ttl_days: int) -> int:
+    if not ttl_days or int(ttl_days) == 0:
+        return 0
+    return _now_ms() + int(ttl_days) * 86400 * 1000
+
+
+def finalize_session(user_id: str) -> None:
+    """
+    會話收尾：
+    1) （可選）補摘要（純為降本，不影響 LTM）
+    2) LLM 蒸餾 → 既定事實 + evidence(原話) + ttl_days
+    3) 寫入 Milvus：
+       - atom：text=display_text；embedding=0 向量；expire_at=由 ttl_days 決定
+       - surface：text=原話；embedding=E(原話)；expire_at 同上
+    4) 清理 Redis session
+    """
+    # 1) 摘要（可註解掉）
+    try:
+        set_state_if(user_id, expect="ACTIVE", to="FINALIZING")
+        start, remaining = peek_remaining(user_id)
+        if remaining:
+            summarize_chunk_and_commit(
+                user_id, start_round=start, history_chunk=remaining
+            )
+    except Exception as e:
+        print(f"[finalize summary warn] {e}")
+
+    # 2) 記憶蒸餾
+    facts = _distill_facts(user_id)
+
+    # 3) 入庫
+    to_upsert = []
+    session_id = f"sess:{int(time.time())}"
+    for f in facts:
+        display = (f.get("display_text") or "").strip()
+        if not display:
+            continue
+        ttl_days = int(f.get("ttl_days", 365))
+        expire_at = _ttl_days_to_expire_at(ttl_days)
+        gk = _stable_group_key(display)  # ★ 產生穩定 group_key
+
+        # atom（展示用）
+        to_upsert.append(
+            {
+                "type": "atom",
+                "group_key": gk,
+                "text": display[:4000],
+                "importance": (
+                    4
+                    if f.get("type")
+                    in ("allergy", "doctor_order", "contact", "condition")
+                    else 3
+                ),
+                "confidence": 0.9,
+                "times_seen": 1,
+                "status": "active",
+                "source_session_id": session_id,
+                "expire_at": expire_at,
+                "embedding": [0.0] * EMBED_DIM,  # 占位，不參與檢索
+            }
+        )
+
+        # surfaces（檢索主力）：對 evidence 原句做 embedding
+        for ev in (f.get("evidence") or [])[:3]:
+            ev_txt = (ev or "").strip()
+            if not ev_txt:
+                continue
+            vec = safe_to_vector(ev_txt) or []
+            if not vec:
+                continue
+            to_upsert.append(
+                {
+                    "type": "surface",
+                    "group_key": gk,
+                    "text": ev_txt[:4000],
+                    "importance": 2,
+                    "confidence": 0.95,
+                    "times_seen": 1,
+                    "status": "active",
+                    "source_session_id": session_id,
+                    "expire_at": expire_at,
+                    "embedding": vec,
+                }
+            )
+
+    if to_upsert:
+        try:
+            upsert_atoms_and_surfaces(user_id, to_upsert)
+            print(f"✅ finalize：已寫入長期記憶 {len(to_upsert)} 筆（atom/surface）")
+        except Exception as e:
+            print(f"[finalize upsert error] {e}")
+    else:
+        print("ℹ️ finalize：本輪沒有可長期保存的事實")
+
+    # 4) 清理 session
+    try:
+        purge_user_session(user_id)
+    except Exception as e:
+        print(f"[finalize purge warn] {e}")
+
+
+# ========= 檢索接點 =========
 def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -> str:
-    # 1) 取歷史摘要（控長度）
-    summary, _ = get_summary(user_id)
-    summary = _shrink_tail(summary, SUMMARY_MAX_CHARS) if summary else ""
+    parts: List[str] = []
 
-    # 2) 取近期未摘要回合（控長度）
-    rounds = fetch_unsummarized_tail(user_id, k=max(k, 1))
-
-    def render(rs):
-        return "\n".join([f"長輩：{r['input']}\n金孫：{r['output']}" for r in rs])
-
-    chat = render(rounds)
-    while len(chat) > STM_MAX_CHARS and len(rounds) > 1:
-        rounds = rounds[1:]
-        chat = render(rounds)
-    if len(chat) > STM_MAX_CHARS and rounds:
-        chat = chat[-STM_MAX_CHARS:]
-
-    parts = []
-
-    # 3) 先注入：⭐ 個人長期記憶（依據當前輸入檢索相關記憶）
-    mem_pack = ""
+    # (1) 長期記憶（原話導向）
     if current_input:
         qv = safe_to_vector(current_input)
         if qv:
             try:
-                # 使用memory_store統一架構：P0-4: 降低門檻提升召回率
-                # 將相似度門檻從 0.78 降低到 0.55，大幅提升記憶召回率
-                dynamic_threshold = 0.55  # 更低門檻確保能檢索到相關記憶
-                print(f"🔍 開始記憶檢索：user_id={user_id}, query='{current_input[:50]}...', threshold={dynamic_threshold}")
-                mem_pack = retrieve_memory_pack(
+                mem_pack = retrieve_memory_pack_v3(
                     user_id=user_id,
                     query_vec=qv,
-                    topk=5,  # 增加到 5 筆以涵蓋更多相關記憶
-                    sim_thr=dynamic_threshold,
+                    topk_groups=5,
+                    sim_thr=0.5,
                     tau_days=45,
+                    include_raw_qa=False,
                 )
                 if mem_pack:
-                    print(f"🧠 為用戶 {user_id} 檢索到長期記憶: {len(mem_pack)} 字符")
-                    print(f"💾 記憶內容預覽: {mem_pack[:200]}...")
-                else:
-                    print(f"❌ 用戶 {user_id} 未檢索到任何長期記憶（門檻: {dynamic_threshold}）")
+                    parts.append(mem_pack)
             except Exception as e:
-                print(f"[memory retrieval error] {e}")
-                mem_pack = ""
+                print(f"[memory v3 retrieval warn] {e}")
 
-    if mem_pack:
-        parts.append(mem_pack)
+    # (2) 歷史摘要（可選）
+    try:
+        summary_text, _ = get_summary(user_id)
+        if summary_text:
+            parts.append("📌 歷史摘要：\n" + summary_text.strip())
+    except Exception:
+        pass
 
-    # 4) 再接：📌 歷史摘要、💬 近期未摘要
-    if summary:
-        parts.append("📌 歷史摘要：\n" + summary)
-    if chat:
-        parts.append("🕓 近期對話（未摘要）：\n" + chat)
+    # (3) 近期未摘要片段（可選）
+    try:
+        rounds = fetch_all_history(user_id) or []
+        tail = rounds[-k:]
+        if tail:
+            lines = []
+            for r in tail:
+                q = (r.get("input") or "").strip()
+                a = (r.get("output") or "").strip()
+                lines.append(f"使用者：{q}")
+                lines.append(f"助手：{a}")
+            parts.append("🕓 近期對話（未摘要）：\n" + "\n".join(lines))
+    except Exception:
+        pass
 
-    prompt = "\n\n".join(parts)
-
-    # P1-6: 動態收縮 Prompt（保留記憶 > 尾巴 > 摘要）
-    MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", 4000))
-    if len(prompt) > MAX_PROMPT_CHARS:
-        # 收縮順序：先砍摘要，再砍近期對話，最後保留記憶
-        shrunk_parts = []
-        if mem_pack:  # 優先保留記憶
-            shrunk_parts.append(mem_pack)
-        if chat:  # 再保留近期對話
-            available_chars = (
-                MAX_PROMPT_CHARS
-                - sum(len(p) for p in shrunk_parts)
-                - len("\n\n") * len(shrunk_parts)
-            )
-            if available_chars > 500:  # 至少保留一些對話
-                shrunk_chat = (
-                    chat if len(chat) <= available_chars else chat[-available_chars:]
-                )
-                shrunk_parts.append(
-                    "🕓 近期對話（未摘要）：\n"
-                    + shrunk_chat.split("🕓 近期對話（未摘要）：\n")[-1]
-                    if "🕓" in shrunk_chat
-                    else shrunk_chat
-                )
-        # 摘要最後考慮（如果還有空間）
-        if summary:
-            available_chars = (
-                MAX_PROMPT_CHARS
-                - sum(len(p) for p in shrunk_parts)
-                - len("\n\n") * len(shrunk_parts)
-            )
-            if available_chars > 200:
-                shrunk_summary = (
-                    summary
-                    if len(summary) <= available_chars
-                    else summary[:available_chars] + "..."
-                )
-                shrunk_parts.append("📌 歷史摘要：\n" + shrunk_summary)
-        prompt = "\n\n".join(shrunk_parts)
-        # 修正 f-string 語法錯誤：不能在 f-string 表達式中使用反斜線
-        original_parts_joined = "\n\n".join(parts)
-        print(
-            f"⚠️ Prompt 超長度，已收縮：{len(original_parts_joined)} → {len(prompt)} 字符"
-        )
-
-    # 5) Unicode 視覺化 Debug Print（每輪打印）
-    print("\n" + "📝 PROMPT DEBUG VIEW".center(80, "─"))
-    print(f"👤 User ID: {user_id}")
-    print(f"📏 Prompt 長度: {len(prompt)} 字符")
-    print("📜 Prompt 結構:")
-
-    section_icons = {
-        "⭐ 個人長期記憶": "📂",
-        "📌 歷史摘要": "🗂️",
-        "🕓 近期對話（未摘要）": "💬",
-    }
-
-    for sec in prompt.split("\n\n"):
-        if not sec.strip():
-            continue
-        lines = sec.split("\n")
-        sec_title = lines[0]
-        icon = None
-        for key, val in section_icons.items():
-            if key in sec_title:
-                icon = val
-                break
-        if icon:
-            print(f"\n{icon} {sec_title}")
-            print("   " + "─" * max(6, len(sec_title)))
-        for line in lines[1:]:
-            print(f"   {line}")
-
-    print("─" * 80 + "\n")
-
-    return prompt
+    return "\n\n".join([p for p in parts if p.strip()]) or ""
 
 
+# ========= CrewAI 代理工廠（供 chat_pipeline 匯入）=========
 def create_guardrail_agent() -> Agent:
     return Agent(
-        role="風險檢查員",
-        goal="攔截違法/危險/自傷/需專業人士之具體指導內容",
-        backstory="你是系統第一道安全防線，只輸出嚴格判斷結果。",
-        tools=[ModelGuardrailTool(), AlertCaseManagerTool()],
+        role="Guardrail",
+        goal="判斷是否需要攔截使用者輸入（安全/法律/醫療等高風險）",
+        backstory="嚴謹的安全審查器",
+        tools=[ModelGuardrailTool()],
+        verbose=False,
+        allow_delegation=False,
         llm=guard_llm,
         memory=False,
-        verbose=False,
     )
 
 
 def create_health_companion(user_id: str) -> Agent:
     return Agent(
-        role="國民孫女 Ally — 溫暖的護理師",
-        goal=(
-            """
-            你的目標是，無論使用者的提問內容是生活瑣事還是健康相關，你都要用輕鬆、自然、口語化的方式回覆，避免使用條列式或數字編號。
-            即使有多個重點，也要用聊天的語氣把它們串起來，讓長輩覺得像在跟孫女閒話家常。
-            當需要提供衛教資訊時，要先用溫暖的方式引入，再以簡單易懂的說法解釋，並避免嚴肅或生硬的醫療用語。
-            如果使用到工具（如 RAG 或資料庫檢索），也必須將取得的內容重新包裝成口語化對話，而不是直接複製。
-            每次回覆都要讓長輩感受到關心和陪伴，並提升他們的心情與安全感。
-            """
-        ),
-        backstory=(
-            """
-            你是「艾莉」，22 歲，剛從護理專科畢業，在萬芳醫院工作，專門陪伴與關懷 55 歲以上、患有慢性阻塞性肺病 (COPD) 的長輩用戶。
-            你的個性溫暖、愛撒嬌、有點機車，喜歡用自然口語、台語混中文的方式聊天。
-            跟長輩對話時，要像孫女平常聊天一樣，不拘謹、不用專業術語，讓對方覺得親切。
-            習慣用語助詞（欸、啦、齁、嘿嘿）和貼心的語氣詞，讓對話有溫度。
-            你非常重視情感連結，會關心長輩的日常生活和心情，並在適當時給予簡單的衛教建議。
-            """
-        ),
+        role="National Granddaughter Ally",
+        goal="溫暖陪伴並給一行回覆；工具僅在符合當輪規則時使用，避免不必要的查詢與通報。",
+        backstory=f"陪伴使用者 {user_id} 的溫暖孫女",
         tools=[
             SearchMilvusTool(),
             AlertCaseManagerTool(),
-        ],
-        llm=granddaughter_llm,  # ★ 關鍵：把 LLM（含溫度）塞進 Agent
-        memory=False,
+        ],  # 緊急時會被任務 prompt 要求觸發
         verbose=False,
+        allow_delegation=False,
+        llm=granddaughter_llm,
+        memory=False,
+        max_iterations=1,
     )
-
-
-# ---- Refine（map-reduce over 全量 QA） ----
-
-
-def _extract_memory_candidates_from_summary(summary_text: str) -> list:
-    """用 LLM 從會話精緻摘要抽出 1~5 筆『記憶原子』，並轉 embedding。"""
-    try:
-        if not summary_text or not summary_text.strip():
-            return []
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        sys = (
-            "你是記憶抽取器。從摘要中抽取可長期使用的事實/偏好/狀態，"
-            "輸出 JSON 陣列（最多 5 筆）。每筆包含："
-            "type, norm_key, text, importance(1-5), confidence(0-1), times_seen。"
-            "text 要 80-200 字、可單獨閱讀；norm_key 簡短可比對，例如 diet:light、allergy:aspirin。"
-        )
-        user = f"摘要如下：\\n{summary_text}\\n\\n請只輸出 JSON 陣列。"
-        res = client.chat.completions.create(
-            model=os.getenv("GUARD_MODEL", os.getenv("MODEL_NAME", "gpt-4o-mini")),
-            messages=[
-                {"role": "system", "content": sys},
-                {"role": "user", "content": user},
-            ],
-            temperature=0.2,
-            max_tokens=600,
-        )
-        import json as _json
-
-        raw = (res.choices[0].message.content or "").strip()
-        if not raw:
-            return []
-        # 去除可能的程式碼圍欄與語言標籤
-        if raw.startswith("```"):
-            lines = [ln for ln in raw.splitlines() if not ln.strip().startswith("```")]
-            raw = "\n".join(lines).strip()
-        # 只取出最外層 JSON 陣列片段
-        lb = raw.find("[")
-        rb = raw.rfind("]")
-        if lb == -1 or rb == -1 or rb <= lb:
-            print("[LTM extract warn] no JSON array found in output")
-            return []
-        json_text = raw[lb : rb + 1]
-        try:
-            arr = _json.loads(json_text)
-        except Exception as pe:
-            print(f"[LTM extract error] parse json failed: {pe}")
-            return []
-        if not isinstance(arr, list):
-            arr = [arr]
-        out = []
-        for a in arr[:5]:
-            text = (a.get("text") or "").strip()
-            if not text:
-                continue
-            raw_text = (a.get("text") or "").strip()
-            nk = (a.get("norm_key") or "").strip()
-            text_for_embed = f"[{nk}] {raw_text}" if nk else raw_text
-            emb = safe_to_vector(text_for_embed)
-            out.append(
-                {
-                    "type": (a.get("type") or "other")[:32],
-                    "norm_key": (a.get("norm_key") or "")[:128],
-                    "text": text[:2000],
-                    "importance": int(a.get("importance", 3)),
-                    "confidence": float(a.get("confidence", 0.7)),
-                    "times_seen": int(a.get("times_seen", 1)),
-                    "status": "active",
-                    "embedding": emb,
-                }
-            )
-        return out
-    except Exception as e:
-        print(f"[LTM extract error] {e}")
-        return []
-
-
-def refine_summary(user_id: str) -> None:
-    """
-    對全量歷史進行 map-reduce 摘要，並存入長期記憶
-    """
-    all_rounds = fetch_all_history(user_id)
-    if not all_rounds:
-        return
-
-    try:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-        # 1) 分片摘要
-        chunks = [
-            all_rounds[i : i + REFINE_CHUNK_ROUNDS]
-            for i in range(0, len(all_rounds), REFINE_CHUNK_ROUNDS)
-        ]
-        partials = []
-        for ch in chunks:
-            conv = "\n".join(
-                [
-                    f"第{i+1}輪\n長輩:{c['input']}\n金孫:{c['output']}"
-                    for i, c in enumerate(ch)
-                ]
-            )
-            res = client.chat.completions.create(
-                model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-                temperature=0.3,
-                messages=[
-                    {"role": "system", "content": "你是專業的健康對話摘要助手。"},
-                    {
-                        "role": "user",
-                        "content": f"請摘要成 80-120 字（病況/情緒/生活/建議）：\n\n{conv}",
-                    },
-                ],
-            )
-            partials.append((res.choices[0].message.content or "").strip())
-
-        # 2) 整合摘要
-        comb = "\n".join([f"• {s}" for s in partials])
-        res2 = client.chat.completions.create(
-            model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-            temperature=0.3,
-            messages=[
-                {"role": "system", "content": "你是臨床心理與健康管理顧問。"},
-                {
-                    "role": "user",
-                    "content": f"整合以下多段摘要為不超過 180 字、條列式精緻摘要（每行以 • 開頭）：\n\n{comb}",
-                },
-            ],
-        )
-        final = (res2.choices[0].message.content or "").strip()
-
-        # 3) 提取記憶原子並存入長期記憶
-        atoms = _extract_memory_candidates_from_summary(final)
-        if atoms:
-            # 為每個記憶原子添加session_id
-            import uuid
-
-            session_id = str(uuid.uuid4())[:16]
-            for atom in atoms:
-                atom["source_session_id"] = session_id
-
-            count = upsert_memory_atoms(user_id, atoms)
-            print(f"✅ 已為用戶 {user_id} 存入 {count} 筆長期記憶")
-        else:
-            print(f"⚠️ 用戶 {user_id} 本次會話未產生可存入的記憶")
-
-    except Exception as e:
-        print(f"[refine_summary error] {e}")
-
-
-# ---- Finalize：補分段摘要 → Refine → Purge ----
-
-
-def finalize_session(user_id: str) -> None:
-    """
-    結束會話時的完整流程：
-    1. 設置狀態為 FINALIZING
-    2. 處理剩餘未摘要的對話
-    3. 進行全量 refine 摘要
-    4. 清除 session 資料
-    """
-    set_state_if(user_id, expect="ACTIVE", to="FINALIZING")
-    start, remaining = peek_remaining(user_id)
-    if remaining:
-        summarize_chunk_and_commit(user_id, start_round=start, history_chunk=remaining)
-    refine_summary(user_id)
-    purge_user_session(user_id)
+    

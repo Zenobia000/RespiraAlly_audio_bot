@@ -9,8 +9,6 @@ from typing import Dict, List, Optional, Tuple
 import redis
 
 REDIS_TTL_SECONDS = int(os.getenv("REDIS_TTL_SECONDS", 86400))
-ALERT_STREAM_KEY = os.getenv("ALERT_STREAM_KEY", "alerts:stream")
-ALERT_STREAM_GROUP = os.getenv("ALERT_STREAM_GROUP", "case_mgr")
 
 
 @lru_cache(maxsize=1)
@@ -59,7 +57,6 @@ def append_round(user_id: str, round_obj: Dict) -> None:
             key,
             f"session:{user_id}:summary:text",
             f"session:{user_id}:summary:rounds",
-            f"session:{user_id}:alerts",
             f"session:{user_id}:state",
         ]
     )
@@ -139,53 +136,12 @@ def commit_summary_chunk(
                 return False
 
 
-def ensure_alert_group() -> None:
-    r = get_redis()
-    try:
-        r.xgroup_create(
-            name=ALERT_STREAM_KEY, groupname=ALERT_STREAM_GROUP, id="$", mkstream=True
-        )
-    except redis.ResponseError as e:
-        if "BUSYGROUP" not in str(e):
-            raise
-
-
-def xadd_alert(
-    user_id: str, reason: str, severity: str = "info", extra: Optional[Dict] = None
-) -> str:
-    ensure_alert_group()
-    r = get_redis()
-    fields = {
-        "user_id": user_id,
-        "reason": reason,
-        "severity": severity,
-        "ts": str(int(time.time() * 1000)),
-    }
-    if extra:
-        fields["extra"] = json.dumps(extra, ensure_ascii=False)
-    xid = r.xadd(ALERT_STREAM_KEY, fields)
-    r.rpush(f"session:{user_id}:alerts", json.dumps(fields, ensure_ascii=False))
-    _touch_ttl([f"session:{user_id}:alerts"])
-    return xid
-
-
-def pop_all_alerts(user_id: str) -> List[Dict]:
-    r = get_redis()
-    key = f"session:{user_id}:alerts"
-    with r.pipeline() as p:
-        p.lrange(key, 0, -1)
-        p.delete(key)
-        items, _ = p.execute()
-    return [json.loads(x) for x in items]
-
-
 def purge_user_session(user_id: str) -> int:
     r = get_redis()
     keys = [
         f"session:{user_id}:history",
         f"session:{user_id}:summary:text",
         f"session:{user_id}:summary:rounds",
-        f"session:{user_id}:alerts",
         f"session:{user_id}:state",
     ]
     p = r.pipeline()
