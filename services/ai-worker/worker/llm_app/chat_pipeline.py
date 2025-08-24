@@ -28,9 +28,9 @@ from .toolkits.redis_store import (
     try_register_request,
 )
 from .toolkits.tools import (
+    MemoryGateTool,
     ModelGuardrailTool,
     SearchMilvusTool,
-    MemoryGateTool,
     summarize_chunk_and_commit,
 )
 
@@ -148,9 +148,13 @@ def handle_user_message(
                 decision = MemoryGateTool()._run(full_text)
                 print(f"🔍 MemoryGateTool 決策: {decision}")
                 if decision == "USE":
-                    ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)  # 檢索長期記憶
+                    ctx = build_prompt_from_redis(
+                        user_id, k=6, current_input=full_text
+                    )  # 檢索長期記憶
                 else:
-                    ctx = build_prompt_from_redis(user_id, k=6, current_input="")         # 不檢索，只帶摘要/近期對話
+                    ctx = build_prompt_from_redis(
+                        user_id, k=6, current_input=""
+                    )  # 不檢索，只帶摘要/近期對話
 
             task = Task(
                 description=(
@@ -165,10 +169,14 @@ def handle_user_message(
                         "【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（違法/成人內容/用藥劑量/診斷/處置等具體指示）。"
                         "請溫柔婉拒且不可提供任何具體方案或替代作法；僅能給一般安全提醒與就醫建議。"
                         if is_block
-                        else "【緊急處置規則（高優先）】若你判斷存在緊急徵象（例如：呼吸困難/胸痛且出冷汗/疑似中風/嚴重過敏/大量出血/"
+                        else "【緊急檢測範圍】只允許針對『使用者輸入：<本輪文字>』這一段做緊急判斷；"
+                        "歷史摘要、個人記憶、近期對話（ctx）僅供衛教參考，不得用來觸發 alert。\n"
+                        "【通報次數】本輪至多呼叫 alert_case_manager 一次；呼叫後必須直接產生最終一句回覆並結束。"
+                        "【緊急處置規則（高優先）】若你判斷存在緊急徵象（例如：呼吸困難/胸痛且出冷汗/疑似中風/嚴重過敏/大量出血/"
                         "自殺或自傷意圖與計畫），你必須『先呼叫 alert_case_manager 工具』；"
-                        '工具輸入必須是 JSON：{"reason": "EMERGENCY: <極簡原因>"}，例如：'
-                        '{"reason": "EMERGENCY: suicidal ideation"}。在看到工具的 Observation 之後，再輸出最終回覆。\n'
+                        '工具輸入必須是 JSON：{"reason": "EMERGENCY: <極簡原因>"}，例如：\n'
+                        'Action Input: {"reason": "EMERGENCY: suicidal ideation"}\n'
+                        "在看到工具的 Observation 之後，再輸出最終回覆。\n"
                         "【輸出格式】\n"
                         "用一句台語混中文、自然聊天的一句話。\n"
                         "【範例】\n"
@@ -184,7 +192,7 @@ def handle_user_message(
                 expected_output="回覆不得超過30個字。",
                 agent=care,
             )
-            res = Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or ""
+            res = Crew(agents=[care], tasks=[task], verbose=True).kickoff().raw or ""
 
         except Exception:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))

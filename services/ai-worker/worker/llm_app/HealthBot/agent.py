@@ -1,38 +1,45 @@
+import hashlib
+import json
 import os
 import time
-import json
-import hashlib
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-from openai import OpenAI
 from crewai import LLM, Agent
+from openai import OpenAI
 
 # ---- 專案模組（注意相對匯入）----
 from ..embedding import safe_to_vector
-from ..toolkits.memory_store import upsert_atoms_and_surfaces, retrieve_memory_pack_v3
+from ..toolkits.memory_store import retrieve_memory_pack_v3, upsert_atoms_and_surfaces
 
 # redis 與工具：注意 summarize_chunk_and_commit 來自 tools.py
 from ..toolkits.redis_store import (
     fetch_all_history,
-    peek_remaining,
-    set_state_if,
-    purge_user_session,
     get_summary,
+    peek_remaining,
+    purge_user_session,
+    set_state_if,
 )
-from ..toolkits.tools import summarize_chunk_and_commit, ModelGuardrailTool, AlertCaseManagerTool, SearchMilvusTool
+from ..toolkits.tools import (
+    AlertCaseManagerTool,
+    ModelGuardrailTool,
+    SearchMilvusTool,
+    summarize_chunk_and_commit,
+)
 
 OPENAI_MODEL = os.getenv("MODEL_NAME", "gpt-4o-mini")
 EMBED_DIM = int(os.getenv("EMBED_DIM", 1536))
 
 granddaughter_llm = LLM(
     model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-    temperature= 0.6,
+    temperature=0.5,
 )
 
 guard_llm = LLM(
     model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
     temperature=0,
 )
+
+
 # ========= 小工具 =========
 def _now_ms() -> int:
     return int(time.time() * 1000)
@@ -91,8 +98,11 @@ def _distill_facts(user_id: str) -> List[Dict[str, Any]]:
         max_tokens=900,
         messages=[
             {"role": "system", "content": _DISTILL_SYS},
-            {"role": "user", "content": f"使用者本輪對話如下（逐字）：\n<<<\n{transcript}\n>>>"}
-        ]
+            {
+                "role": "user",
+                "content": f"使用者本輪對話如下（逐字）：\n<<<\n{transcript}\n>>>",
+            },
+        ],
     )
     raw = (res.choices[0].message.content or "").strip()
     # 清掉 ```json 區塊符號
@@ -103,7 +113,7 @@ def _distill_facts(user_id: str) -> List[Dict[str, Any]]:
     if lb == -1 or rb == -1 or rb <= lb:
         return []
     try:
-        arr = json.loads(raw[lb:rb+1])
+        arr = json.loads(raw[lb : rb + 1])
         return arr if isinstance(arr, list) else [arr]
     except Exception:
         return []
@@ -130,7 +140,9 @@ def finalize_session(user_id: str) -> None:
         set_state_if(user_id, expect="ACTIVE", to="FINALIZING")
         start, remaining = peek_remaining(user_id)
         if remaining:
-            summarize_chunk_and_commit(user_id, start_round=start, history_chunk=remaining)
+            summarize_chunk_and_commit(
+                user_id, start_round=start, history_chunk=remaining
+            )
     except Exception as e:
         print(f"[finalize summary warn] {e}")
 
@@ -149,18 +161,25 @@ def finalize_session(user_id: str) -> None:
         gk = _stable_group_key(display)  # ★ 產生穩定 group_key
 
         # atom（展示用）
-        to_upsert.append({
-            "type": "atom",
-            "group_key": gk,
-            "text": display[:4000],
-            "importance": 4 if f.get("type") in ("allergy","doctor_order","contact","condition") else 3,
-            "confidence": 0.9,
-            "times_seen": 1,
-            "status": "active",
-            "source_session_id": session_id,
-            "expire_at": expire_at,
-            "embedding": [0.0] * EMBED_DIM,  # 占位，不參與檢索
-        })
+        to_upsert.append(
+            {
+                "type": "atom",
+                "group_key": gk,
+                "text": display[:4000],
+                "importance": (
+                    4
+                    if f.get("type")
+                    in ("allergy", "doctor_order", "contact", "condition")
+                    else 3
+                ),
+                "confidence": 0.9,
+                "times_seen": 1,
+                "status": "active",
+                "source_session_id": session_id,
+                "expire_at": expire_at,
+                "embedding": [0.0] * EMBED_DIM,  # 占位，不參與檢索
+            }
+        )
 
         # surfaces（檢索主力）：對 evidence 原句做 embedding
         for ev in (f.get("evidence") or [])[:3]:
@@ -170,18 +189,20 @@ def finalize_session(user_id: str) -> None:
             vec = safe_to_vector(ev_txt) or []
             if not vec:
                 continue
-            to_upsert.append({
-                "type": "surface",
-                "group_key": gk,
-                "text": ev_txt[:4000],
-                "importance": 2,
-                "confidence": 0.95,
-                "times_seen": 1,
-                "status": "active",
-                "source_session_id": session_id,
-                "expire_at": expire_at,
-                "embedding": vec,
-            })
+            to_upsert.append(
+                {
+                    "type": "surface",
+                    "group_key": gk,
+                    "text": ev_txt[:4000],
+                    "importance": 2,
+                    "confidence": 0.95,
+                    "times_seen": 1,
+                    "status": "active",
+                    "source_session_id": session_id,
+                    "expire_at": expire_at,
+                    "embedding": vec,
+                }
+            )
 
     if to_upsert:
         try:
@@ -214,7 +235,7 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
                     topk_groups=5,
                     sim_thr=0.5,
                     tau_days=45,
-                    include_raw_qa=False
+                    include_raw_qa=False,
                 )
                 if mem_pack:
                     parts.append(mem_pack)
@@ -266,9 +287,13 @@ def create_health_companion(user_id: str) -> Agent:
         role="National Granddaughter Ally",
         goal="用台語混中文關心長輩，遇緊急徵象先呼叫通報工具，再安撫與引導求助",
         backstory=f"陪伴使用者 {user_id} 的溫暖孫女",
-        tools=[SearchMilvusTool(), AlertCaseManagerTool()],  # 緊急時會被任務 prompt 要求觸發
+        tools=[
+            SearchMilvusTool(),
+            AlertCaseManagerTool(),
+        ],  # 緊急時會被任務 prompt 要求觸發
         verbose=False,
         allow_delegation=False,
         llm=granddaughter_llm,
         memory=False,
+        max_iterations=2,
     )

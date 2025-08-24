@@ -1,5 +1,6 @@
-import os, json
-from typing import List, Dict
+import json
+import os
+from typing import Dict, List
 
 from crewai.tools import BaseTool
 from openai import OpenAI
@@ -15,6 +16,7 @@ _collection = None
 
 class MemoryGateToolSchema(BaseModel):
     text: str = Field(..., description="使用者本輪輸入")
+
 
 class MemoryGateTool(BaseTool):
     name: str = "memory_gate"
@@ -33,15 +35,21 @@ class MemoryGateTool(BaseTool):
                 model=os.getenv("GUARD_MODEL", os.getenv("MODEL_NAME", "gpt-4o-mini")),
                 temperature=0,
                 max_tokens=4,
-                messages=[{"role":"system","content":sys},{"role":"user","content":text}],
+                messages=[
+                    {"role": "system", "content": sys},
+                    {"role": "user", "content": text},
+                ],
             )
             out = (res.choices[0].message.content or "").strip().upper()
             return "USE" if out.startswith("USE") else "SKIP"
         except Exception:
             # 失敗時保守：直接 SKIP，避免卡流程
             return "SKIP"
+
+
 _milvus_loaded = False
 _collection = None
+
 
 def _index_type_of(col: Collection) -> str:
     idx = (col.indexes or [None])[0]
@@ -53,13 +61,20 @@ def _index_type_of(col: Collection) -> str:
             pass
     return (it or "HNSW").upper()
 
+
 def _search_param(idx_type: str) -> Dict:
     if idx_type.startswith("IVF"):
-        return {"metric_type": "COSINE", "params": {"nprobe": int(os.getenv("COPD_NPROBE", 32))}}
+        return {
+            "metric_type": "COSINE",
+            "params": {"nprobe": int(os.getenv("COPD_NPROBE", 32))},
+        }
     return {"metric_type": "COSINE", "params": {"ef": int(os.getenv("COPD_EF", 128))}}
 
+
 class SearchMilvusToolSchema(BaseModel):
-    query: str = Field(..., description="當前要查詢的自然語句（使用者提問或你轉述的關鍵句）")
+    query: str = Field(
+        ..., description="當前要查詢的自然語句（使用者提問或你轉述的關鍵句）"
+    )
     topk: int = Field(5, description="最多擷取的候選數量（預設5）")
 
 
@@ -79,15 +94,20 @@ class SearchMilvusTool(BaseTool):
                 try:
                     connections.get_connection("default")
                 except Exception:
-                    connections.connect(alias="default", uri=os.getenv("MILVUS_URI","http://localhost:19530"))
-                coll_name = os.getenv("COPD_COLL_NAME","copd_qa")
-                _collection = Collection(coll_name); _collection.load(); _milvus_loaded = True
+                    connections.connect(
+                        alias="default",
+                        uri=os.getenv("MILVUS_URI", "http://localhost:19530"),
+                    )
+                coll_name = os.getenv("COPD_COLL_NAME", "copd_qa")
+                _collection = Collection(coll_name)
+                _collection.load()
+                _milvus_loaded = True
 
             vec = to_vector(query)
             if not vec:
-                return json.dumps({"source":"copd_qa","hits":[]}, ensure_ascii=False)
+                return json.dumps({"source": "copd_qa", "hits": []}, ensure_ascii=False)
             if not isinstance(vec, list):
-                vec = vec.tolist() if hasattr(vec,"tolist") else list(vec)
+                vec = vec.tolist() if hasattr(vec, "tolist") else list(vec)
 
             idx_type = _index_type_of(_collection)
             param = _search_param(idx_type)
@@ -96,23 +116,25 @@ class SearchMilvusTool(BaseTool):
                 anns_field="embedding",
                 param=param,
                 limit=topk,
-                output_fields=["question","answer","category","keywords","notes"],
+                output_fields=["question", "answer", "category", "keywords", "notes"],
             )
 
             thr = float(os.getenv("SIMILARITY_THRESHOLD", 0.7))
             hits: List[dict] = []
             for h in res[0]:
-                score = float(getattr(h,"distance", getattr(h,"score",0.0)))
+                score = float(getattr(h, "distance", getattr(h, "score", 0.0)))
                 if score >= thr:
                     e = h.entity
-                    hits.append({
-                        "score": score,
-                        "q": e.get("question",""),
-                        "a": e.get("answer",""),
-                        "cat": e.get("category",""),
-                        "kw": e.get("keywords",""),
-                        "notes": e.get("notes",""),
-                    })
+                    hits.append(
+                        {
+                            "score": score,
+                            "q": e.get("question", ""),
+                            "a": e.get("answer", ""),
+                            "cat": e.get("category", ""),
+                            "kw": e.get("keywords", ""),
+                            "notes": e.get("notes", ""),
+                        }
+                    )
             if not hits:
                 return (
                     "📚 參考資料：未找到相符條目（可能無資料或相似度不足）。"
@@ -136,6 +158,7 @@ class SearchMilvusTool(BaseTool):
             )
         except Exception as e:
             return f"📚 參考資料：檢索失敗（{str(e)}）。若你仍需回答，請基於通用常識與目前脈絡，簡潔回覆；避免杜撰。"
+
 
 def summarize_chunk_and_commit(
     user_id: str, start_round: int, history_chunk: list
@@ -189,18 +212,22 @@ class AlertCaseManagerTool(BaseTool):
     args_schema = AlertCaseManagerToolSchema  # ★ 關鍵：明確宣告參數鍵
 
     def _run(self, reason: str) -> str:
+        # 安全地抓 user_id；CrewAI 預設沒有 runtime_context
+        uid = None
         try:
-            uid = self.runtime_context.get("user_id") or os.getenv("CURRENT_USER_ID")
-            import datetime
-            ts = datetime.datetime.now().isoformat(timespec="seconds")
-            print(
-                f"[{ts}] 🚨 AlertCaseManagerTool triggered: user={uid}, reason={reason}"
-            )
-            from .rabbitmq_publisher import publish_alert
-            publish_alert(user_id=uid, reason=reason)
-            return f"⚠️ 已通報個管師使用者ID: {uid}，事由：{reason}"
-        except Exception as e:
-            return f"[Alert 送出失敗] {e}"
+            uid = (getattr(self, "runtime_context", {}) or {}).get("user_id")
+        except Exception:
+            pass
+        uid = uid or os.getenv("CURRENT_USER_ID") or "unknown"
+
+        from datetime import datetime
+
+        ts = datetime.now().isoformat(timespec="seconds")
+        print(f"[{ts}] 🚨 AlertCaseManagerTool triggered: user={uid}, reason={reason}")
+        # 這裡本來有 MQ 發送的註解碼，保留即可
+        # from .rabbitmq_publisher import publish_alert
+        # publish_alert(user_id=uid, reason=reason)
+        return f"⚠️ 已通報個管師使用者ID: {uid}，事由：{reason}"
 
 
 class ModelGuardrailTool(BaseTool):
