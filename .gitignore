@@ -17,6 +17,7 @@ node_modules
 doucment/
 API文件.csv
 .env
+.env.backup
 
 # Logs
 logs
@@ -53,3 +54,5 @@ web_dashboard/
 .cursorrules
 test_education_api.py
 EDUCATION_API_README.md
+docker-compose.mac.yml
+test_frontend_api_config.html

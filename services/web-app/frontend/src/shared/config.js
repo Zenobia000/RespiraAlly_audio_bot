@@ -1,16 +1,18 @@
 // 環境配置
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+export const API_BASE_URL = import.meta.env.DEV
+  ? "/api" // 開發模式使用 Vite 代理
+  : import.meta.env.VITE_API_BASE_URL || "/api/v1";
 export const LIFF_ID = import.meta.env.VITE_LIFF_ID || "";
 export const ENABLE_MOCK = import.meta.env.VITE_ENABLE_MOCK === "true";
 export const ENV = import.meta.env.VITE_ENV || "development";
 
 // 功能旗標
 export const FLAGS = {
-  OVERVIEW_READY: false, // 總覽 API 是否就緒
-  PATIENT_KPIS_READY: false, // 個案 KPI API 是否就緒
-  AI_ALERTS_READY: false, // AI 即時通報是否就緒
-  ENABLE_TASK_DRAG: true, // 是否啟用任務拖曳
-  ENABLE_EDU_EDIT: true, // 是否啟用衛教資源編輯
+  OVERVIEW_READY: true, // 總覽 API 已就緒 ✅
+  PATIENT_KPIS_READY: true, // 個案 KPI API 已就緒 ✅
+  AI_ALERTS_READY: false, // AI 即時通報未就緒
+  ENABLE_TASK_DRAG: true, // 任務 API 已就緒 ✅
+  ENABLE_EDU_EDIT: true, // 衛教資源 API 已就緒 ✅
 };
 
 // API 端點配置
@@ -32,11 +34,11 @@ export const API_ENDPOINTS = {
   TASKS: "/tasks",
   TASK_DETAIL: (id) => `/tasks/${id}`,
 
-  // 總覽 (尚未實作)
+  // 總覽
   OVERVIEW_KPIS: "/overview/kpis",
   OVERVIEW_TRENDS: "/overview/trends",
   OVERVIEW_ADHERENCE: "/overview/adherence",
-  PATIENT_KPIS: (id) => `/patient/${id}/kpis`,
+  PATIENT_KPIS: (id) => `/patients/${id}/kpis`, // TODO: 未實作 - 個別病患 KPI API
 
   // 通報
   ALERTS_LIVE: "/alerts/live",

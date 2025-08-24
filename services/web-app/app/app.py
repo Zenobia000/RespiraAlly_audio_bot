@@ -13,6 +13,7 @@ from .api.chat import bp as chat_bp  # Explicitly import and alias the blueprint
 from .api.voice import bp as voice_bp  # Import voice API blueprint
 from .api.education import education_bp  # Import education API blueprint
 from .api.overview import overview_bp  # Import overview API blueprint
+from .api.tasks import tasks_bp  # Import tasks API blueprint
 from .core.notification_service import start_notification_listener
 from .middleware.error_handler import register_error_handlers
 
@@ -62,6 +63,7 @@ def create_app(config_name="default"):
     app.register_blueprint(voice_bp)  # Register the voice API blueprint
     app.register_blueprint(education_bp)  # Register the education API blueprint
     app.register_blueprint(overview_bp)  # Register the overview API blueprint
+    app.register_blueprint(tasks_bp)  # Register the tasks API blueprint
 
     # 4. 註冊統一的錯誤處理器
     register_error_handlers(app)

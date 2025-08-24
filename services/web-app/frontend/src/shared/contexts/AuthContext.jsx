@@ -19,8 +19,8 @@ export const AuthProvider = ({ children }) => {
 
   // 檢查現有 token 並驗證
   useEffect(() => {
-    // 開發模式：直接設定治療師用戶，跳過登入流程
-    if (import.meta.env.DEV) {
+    // 檢查是否強制開發模式自動登入（只有在環境變數明確設定時才啟用）
+    if (import.meta.env.VITE_FORCE_DEV_MODE === "true") {
       setUser({
         id: "therapist_01",
         account: "therapist_01",
@@ -68,7 +68,9 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const response = await apiClient.post(API_ENDPOINTS.LOGIN, credentials);
-      const { token, user } = response;
+
+      // 處理後端的響應格式 { data: { token, user } }
+      const { token, user } = response.data || response;
 
       setToken(token, credentials.remember);
       setUser(user);
