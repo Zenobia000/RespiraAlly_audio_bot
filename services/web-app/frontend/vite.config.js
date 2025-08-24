@@ -20,6 +20,9 @@ export default defineConfig(({ command, mode }) => {
   });
 
   return {
+    // 設定基礎路徑，對應 nginx 的 /static/dist/ 路徑
+    base: "/static/dist/",
+
     plugins: [
       react(),
       // 開發模式下啟用 ESLint (寬鬆模式)
@@ -34,6 +37,9 @@ export default defineConfig(({ command, mode }) => {
     ],
 
     resolve: {
+      // 🔥 修復反模式：防止 React 多版本衝突，確保 chunk 邊界穩定
+      dedupe: ["react", "react-dom"],
+
       alias: {
         // 根目錄
         "@": resolve(__dirname, "./src"),
@@ -62,6 +68,10 @@ export default defineConfig(({ command, mode }) => {
         "@assets": resolve(__dirname, "./src/assets"),
         "@styles": resolve(__dirname, "./src/styles"),
         "@services": resolve(__dirname, "./src/services"),
+
+        // 🔥 修復反模式：強制使用專案根的 React 版本，避免路徑混亂
+        react: resolve(__dirname, "node_modules/react"),
+        "react-dom": resolve(__dirname, "node_modules/react-dom"),
       },
     },
 
@@ -82,6 +92,25 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/api/, "/api/v1"),
+          configure: (proxy, _options) => {
+            proxy.on("error", (err, _req, _res) => {
+              console.log("proxy error", err);
+            });
+            proxy.on("proxyReq", (proxyReq, req, _res) => {
+              console.log(
+                "Sending Request to the Target:",
+                req.method,
+                req.url
+              );
+            });
+            proxy.on("proxyRes", (proxyRes, req, _res) => {
+              console.log(
+                "Received Response from the Target:",
+                proxyRes.statusCode,
+                req.url
+              );
+            });
+          },
         },
       },
       // HMR 配置
@@ -104,31 +133,25 @@ export default defineConfig(({ command, mode }) => {
         output: {
           // 智慧程式碼分割
           manualChunks: (id) => {
-            // Vendor 分割
+            // Vendor 分割 - 修復 React 依賴問題
             if (id.includes("node_modules")) {
-              // React 生態系
-              if (id.includes("react") || id.includes("react-dom")) {
-                return "react-vendor";
+              // 🔥 修復：將 React 和核心 React 庫合併到 vendor
+              if (
+                id.includes("react") ||
+                id.includes("react-dom") ||
+                id.includes("react-router") ||
+                id.includes("@tanstack/react-query") ||
+                id.includes("react-hook-form")
+              ) {
+                return "vendor"; // 統一放在 vendor 中
               }
-              // 路由
-              if (id.includes("react-router")) {
-                return "router-vendor";
-              }
-              // 狀態管理和查詢
-              if (id.includes("@tanstack/react-query")) {
-                return "query-vendor";
-              }
-              // 圖表庫
+              // 圖表庫（獨立，但大）
               if (id.includes("recharts") || id.includes("d3")) {
                 return "charts-vendor";
               }
-              // 日曆
+              // 日曆庫（獨立，但大）
               if (id.includes("@fullcalendar")) {
                 return "calendar-vendor";
-              }
-              // 表單處理
-              if (id.includes("react-hook-form") || id.includes("zod")) {
-                return "forms-vendor";
               }
               // 其他第三方庫
               return "vendor";
@@ -177,8 +200,9 @@ export default defineConfig(({ command, mode }) => {
           },
         },
 
-        // 外部化依賴 (如果需要 CDN)
-        external: mode === "cdn" ? ["react", "react-dom"] : [],
+        // 🔥 修復反模式：永遠不外部化 React，保持 chunk 穩定性
+        // 靜態 CDN 只負責檔案分發，不涉及程式碼切分
+        external: [],
       },
 
       // 警告配置

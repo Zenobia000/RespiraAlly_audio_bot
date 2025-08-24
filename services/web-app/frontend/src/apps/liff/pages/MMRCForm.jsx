@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
+import bgImageUrl from "@assets/毛玻璃_BG2.png";
 
 // mMRC 呼吸困難量表題目
 const MMRC_OPTIONS = [
@@ -77,10 +78,36 @@ const MMRCForm = () => {
 
     setIsSubmitting(true);
     try {
-      // TODO: 提交 mMRC 問卷到 API
-      // API 端點: POST /api/mmrc-assessments
-      // 資料格式: { mmrc_score: number }
-      console.log("提交 mMRC 問卷:", { mmrc_score: selectedGrade });
+      // 取得病患 ID
+      const patientId =
+        localStorage.getItem("patientId") ||
+        sessionStorage.getItem("patientId");
+
+      if (!patientId) {
+        throw new Error("找不到病患 ID，請重新登入");
+      }
+
+      // 準備 mMRC 問卷資料
+      const mmrcData = {
+        mmrc_score: selectedGrade,
+      };
+
+      // 提交到 API
+      const response = await fetch(
+        `/api/v1/patients/${patientId}/questionnaires/mmrc`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(mmrcData),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "提交失敗");
+      }
 
       showMessage("success", "問卷已提交成功！");
 
@@ -90,7 +117,7 @@ const MMRCForm = () => {
       }, 1500);
     } catch (error) {
       console.error("Submit error:", error);
-      showMessage("error", "提交失敗，請重試");
+      showMessage("error", error.message || "提交失敗，請重試");
     } finally {
       setIsSubmitting(false);
     }
@@ -157,7 +184,7 @@ const MMRCForm = () => {
           left: 0;
           right: 0;
           bottom: 0;
-          background: url("/static/assets/毛玻璃_BG2.png") center/cover;
+          background: url(${bgImageUrl}) center/cover;
           opacity: 0.3;
           z-index: 0;
         }

@@ -16,7 +16,15 @@ export const usePatients = (params = {}) => {
     queryKey: ["patients", params],
     queryFn: () => {
       if (ENABLE_MOCK) return Promise.resolve(mockPatients);
-      const queryString = new URLSearchParams(params).toString();
+
+      // 過濾掉 undefined 和空字符串的參數
+      const filteredParams = Object.fromEntries(
+        Object.entries(params).filter(
+          ([_, value]) => value !== undefined && value !== null && value !== ""
+        )
+      );
+
+      const queryString = new URLSearchParams(filteredParams).toString();
       return apiClient.get(
         `${API_ENDPOINTS.THERAPIST_PATIENTS}?${queryString}`
       );

@@ -1,5 +1,6 @@
 # services/web-app/seed_data.py
 import random
+import string
 import uuid
 from datetime import date, timedelta
 from faker import Faker
@@ -19,6 +20,11 @@ fake = Faker('zh_TW')
 app, socketio = create_app()
 
 # --- 輔助函式 ---
+def generate_random_password(length=12):
+    """生成英數字混合的隨機密碼"""
+    characters = string.ascii_letters + string.digits  # 包含大小寫字母和數字
+    return ''.join(random.choice(characters) for _ in range(length))
+
 def get_mmrc_answer(score):
     """根據 MMRC 分數回傳對應的文字描述"""
     answers = {
@@ -96,7 +102,8 @@ def create_patients(num_patients, therapists):
             email=fake.email(),
             phone=fake.phone_number()
         )
-        patient.set_password('password')
+        # 病患使用隨機生成的英數字混合12位密碼
+        patient.set_password(generate_random_password())
 
         assigned_therapist = random.choice(therapists)
         patient.health_profile = HealthProfile(

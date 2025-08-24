@@ -65,25 +65,39 @@ const DailyMetrics = () => {
         return;
       }
 
+      // 取得病患 ID
+      const patientId =
+        localStorage.getItem("patientId") ||
+        sessionStorage.getItem("patientId") ||
+        getUserId();
+
+      if (!patientId) {
+        throw new Error("找不到病患 ID，請重新登入");
+      }
+
       // 轉換資料格式以符合後端 API 期望
       const apiData = {
-        patient_id: getUserId() || 1, // 測試用預設 ID
-        water_cc: parseInt(finalData.water),
-        medication: finalData.medication === "是" ? true : false,
-        exercise_min: parseInt(finalData.exercise),
-        cigarettes: parseInt(finalData.cigarettes),
+        water_intake: parseInt(finalData.water),
+        medication_taken: finalData.medication === "是" ? true : false,
+        exercise_minutes: parseInt(finalData.exercise),
+        cigarettes_count: parseInt(finalData.cigarettes),
+        mood_score: 3, // 預設中等心情，後續可加入心情選擇
+        symptoms: [], // 預設無症狀，後續可加入症狀選擇
       };
 
       console.log("準備送出的資料:", apiData);
 
-      // 使用測試 API（無需認證）
-      const response = await fetch("/api/v1/patients/test/daily_metrics", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(apiData),
-      });
+      // 提交到正確的 API 端點
+      const response = await fetch(
+        `/api/v1/patients/${patientId}/daily_metrics`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(apiData),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

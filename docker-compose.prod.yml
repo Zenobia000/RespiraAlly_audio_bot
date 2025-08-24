@@ -210,7 +210,7 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: /infra/nginx/Dockerfile.prod
+      dockerfile: ./infra/nginx/Dockerfile.prod
     container_name: prod_nginx_load_balancer
     ports:
       - "80:80"
