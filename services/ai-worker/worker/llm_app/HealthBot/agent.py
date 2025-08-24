@@ -285,7 +285,7 @@ def create_guardrail_agent() -> Agent:
 def create_health_companion(user_id: str) -> Agent:
     return Agent(
         role="National Granddaughter Ally",
-        goal="用台語混中文關心長輩，遇緊急徵象先呼叫通報工具，再安撫與引導求助",
+        goal="溫暖陪伴並給一行回覆；工具僅在符合當輪規則時使用，避免不必要的查詢與通報。",
         backstory=f"陪伴使用者 {user_id} 的溫暖孫女",
         tools=[
             SearchMilvusTool(),
@@ -295,5 +295,6 @@ def create_health_companion(user_id: str) -> Agent:
         allow_delegation=False,
         llm=granddaughter_llm,
         memory=False,
-        max_iterations=2,
+        max_iterations=1,
     )
+    
