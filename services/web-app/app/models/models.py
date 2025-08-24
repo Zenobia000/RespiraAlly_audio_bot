@@ -104,29 +104,37 @@ class QuestionnaireCAT(db.Model):
     record_date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+class UserAlert(db.Model):
+    __tablename__ = 'user_alerts'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    is_confirmed = db.Column(db.Boolean, default=False, nullable=False)
+    user = db.relationship('User', backref=db.backref('alerts', lazy=True))
 class Task(db.Model):
     """任務管理模型"""
     __tablename__ = 'tasks'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     type = db.Column(db.String(50))  # 衛教/追蹤/評估/回診
     status = db.Column(db.String(50), default='pending')  # pending/in_progress/completed
     priority = db.Column(db.Integer, default=1)  # 1-5
-    
+
     # 關聯 - 加入 ondelete 約束
     assignee_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     patient_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'))
     created_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'))
-    
+
     # 時間
     due_date = db.Column(db.DateTime)
     start_date = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
+
     # 關係定義
     assignee = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_tasks')
     patient = db.relationship('User', foreign_keys=[patient_id], backref='related_tasks')
@@ -153,7 +161,7 @@ class Task(db.Model):
 class AlertNotification(db.Model):
     """AI 即時通報模型"""
     __tablename__ = 'alert_notifications'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'))
     therapist_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'))
@@ -164,7 +172,7 @@ class AlertNotification(db.Model):
     is_read = db.Column(db.Boolean, default=False)
     read_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    
+
     # 關係定義
     patient = db.relationship('User', foreign_keys=[patient_id], backref='patient_alerts')
     therapist = db.relationship('User', foreign_keys=[therapist_id], backref='therapist_alerts')

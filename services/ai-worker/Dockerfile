@@ -8,4 +8,4 @@ RUN apt-get update \
     rubberband-cli \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r requirements.txt
-CMD ["python", "-u", "worker/main.py"]
+CMD ["python", "-u", "worker/main.py && worker/llm_app/load_article.py"]
