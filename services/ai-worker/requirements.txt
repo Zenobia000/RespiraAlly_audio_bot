@@ -36,3 +36,4 @@ langchain-openai
 
 # --- Configuration ---
 python-dotenv
+pydub
