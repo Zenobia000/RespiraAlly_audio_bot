@@ -21,14 +21,15 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.50'
+          cpus: "0.50"
           memory: 512M
         reservations:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}" ]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,7 +41,7 @@ services:
       - redisdata:/data
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,7 +81,7 @@ services:
       - minio:/data
     command: minio server /data --console-address ":9001"
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -88,7 +89,7 @@ services:
 
   milvus:
     image: milvusdb/milvus:v2.5.14
-    command: [ "milvus", "run", "standalone" ]
+    command: ["milvus", "run", "standalone"]
     container_name: prod_milvus_vector_db
     depends_on:
       - etcd
@@ -123,6 +124,11 @@ services:
     build:
       context: ./services/web-app
       dockerfile: Dockerfile # 應確保此 Dockerfile 使用 Gunicorn 等生產級伺服器
+      args:
+        - LIFF_CHANNEL_ID=${LIFF_CHANNEL_ID}
+        - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
+        - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: prod_web_app_service
     command: gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:5000 wsgi:app
     env_file:
@@ -189,7 +195,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [ gpu ]
+              capabilities: [gpu]
     depends_on:
       - rabbitmq
       - postgres

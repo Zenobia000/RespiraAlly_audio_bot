@@ -220,12 +220,12 @@ def handle_line_register():
 
 @auth_bp.route('/liff', methods=['GET'])
 @swag_from({
-    'summary': '提供 LIFF 頁面',
-    'description': '提供 LINE Front-end Framework (LIFF) 的主要 HTML 頁面。',
+    'summary': '提供 LIFF 應用程式',
+    'description': '提供 LINE Front-end Framework (LIFF) 的 React 應用程式主頁面。',
     'tags': ['LIFF'],
     'responses': {
         '200': {
-            'description': '成功回傳 LIFF HTML 頁面',
+            'description': '成功回傳 LIFF React 應用程式',
             'content': {
                 'text/html': {}
             }
@@ -233,22 +233,22 @@ def handle_line_register():
     }
 })
 def serve_liff_page():
-    """提供 LIFF 靜態頁面"""
+    """提供 LIFF React 應用程式"""
     from flask import current_app, send_from_directory
-    # The static folder should be configured at the app level
-    # e.g., app = Flask(__name__, static_folder='../static')
-    # Here we assume the static folder is 'static' at the app's root
-    return send_from_directory(current_app.static_folder, 'liff.html')
+    import os
+    # 指向 React 應用程式的 index.html
+    dist_folder = os.path.join(current_app.static_folder, 'dist')
+    return send_from_directory(dist_folder, 'index.html')
 
 
 @auth_bp.route('/cat_form', methods=['GET'])
 @swag_from({
     'summary': '提供 CAT 問卷頁面',
-    'description': '提供 LINE Front-end Framework (LIFF) 的CAT、ＭＭＲＣ問卷頁面。',
+    'description': '重導向到 React 應用程式的 CAT 問卷頁面。',
     'tags': ['CAT', 'MMRC'],
     'responses': {
         '200': {
-            'description': '成功回傳 LIFF HTML 頁面',
+            'description': '成功回傳 React 應用程式',
             'content': {
                 'text/html': {}
             }
@@ -256,22 +256,22 @@ def serve_liff_page():
     }
 })
 def serve_cat_form_page():
-    """提供 CAT 問卷靜態頁面"""
+    """重導向到 React 應用程式的 CAT 問卷頁面"""
     from flask import current_app, send_from_directory
-    # The static folder should be configured at the app level
-    # e.g., app = Flask(__name__, static_folder='../static')
-    # Here we assume the static folder is 'static' at the app's root
-    return send_from_directory(current_app.static_folder, 'cat_form.html')
+    import os
+    # 指向 React 應用程式，由前端路由處理 /questionnaire/cat
+    dist_folder = os.path.join(current_app.static_folder, 'dist')
+    return send_from_directory(dist_folder, 'index.html')
 
 
 @auth_bp.route('/daily_metric', methods=['GET'])
 @swag_from({
     'summary': '提供每日健康紀錄頁面',
-    'description': '提供每日健康紀錄的頁面。',
+    'description': '重導向到 React 應用程式的每日健康紀錄頁面。',
     'tags': ['Health Data & Questionnaires'],
     'responses': {
         '200': {
-            'description': '成功回傳每日健康紀錄 HTML 頁面',
+            'description': '成功回傳 React 應用程式',
             'content': {
                 'text/html': {}
             }
@@ -279,19 +279,22 @@ def serve_cat_form_page():
     }
 })
 def serve_daily_metric_page():
-    """提供每日健康紀錄靜態頁面"""
+    """重導向到 React 應用程式的每日健康記錄頁面"""
     from flask import current_app, send_from_directory
-    return send_from_directory(current_app.static_folder, 'daily_metric.html')
+    import os
+    # 指向 React 應用程式，由前端路由處理 /daily-metrics
+    dist_folder = os.path.join(current_app.static_folder, 'dist')
+    return send_from_directory(dist_folder, 'index.html')
 
 
 @auth_bp.route('/mmrc_form', methods=['GET'])
 @swag_from({
     'summary': '提供 MMRC 問卷頁面',
-    'description': '提供 MMRC 問卷的頁面。',
+    'description': '重導向到 React 應用程式的 MMRC 問卷頁面。',
     'tags': ['Health Data & Questionnaires'],
     'responses': {
         '200': {
-            'description': '成功回傳 MMRC HTML 頁面',
+            'description': '成功回傳 React 應用程式',
             'content': {
                 'text/html': {}
             }
@@ -299,19 +302,22 @@ def serve_daily_metric_page():
     }
 })
 def serve_mmrc_form_page():
-    """提供 MMRC 問卷靜態頁面"""
+    """重導向到 React 應用程式的 MMRC 問卷頁面"""
     from flask import current_app, send_from_directory
-    return send_from_directory(current_app.static_folder, 'mmrc_form.html')
+    import os
+    # 指向 React 應用程式，由前端路由處理 /questionnaire/mmrc
+    dist_folder = os.path.join(current_app.static_folder, 'dist')
+    return send_from_directory(dist_folder, 'index.html')
 
 
 @auth_bp.route('/voice_chat', methods=['GET'])
 @swag_from({
     'summary': '提供即時語音對談頁面',
-    'description': '提供即時語音回覆（Radio Wave + Overlay）之 LIFF/瀏覽器頁面，供使用者錄音並獲取 AI 語音回覆。',
+    'description': '重導向到 React 應用程式的語音對談頁面，提供即時語音回覆功能。',
     'tags': ['LIFF', 'Voice'],
     'responses': {
         '200': {
-            'description': '成功回傳 Voice Chat HTML 頁面',
+            'description': '成功回傳 React 應用程式',
             'content': {
                 'text/html': {}
             }
@@ -319,6 +325,47 @@ def serve_mmrc_form_page():
     }
 })
 def serve_voice_chat_page():
-    """提供 Voice Chat 靜態頁面"""
+    """重導向到 React 應用程式的語音對談頁面"""
     from flask import current_app, send_from_directory
-    return send_from_directory(current_app.static_folder, 'voice_chat.html')
+    import os
+    # 指向 React 應用程式，由前端路由處理 /voice-chat
+    dist_folder = os.path.join(current_app.static_folder, 'dist')
+    return send_from_directory(dist_folder, 'index.html')
+
+
+@auth_bp.route('/container_health', methods=['GET'])
+@swag_from({
+    'summary': '容器健康檢查端點',
+    'description': '用於 Docker 容器健康檢查，確認服務是否正常運行。',
+    'tags': ['Health'],
+    'responses': {
+        '200': {
+            'description': '服務正常運行',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'status': {'type': 'string', 'example': 'healthy'},
+                            'timestamp': {'type': 'string', 'example': '2024-01-01T00:00:00Z'},
+                            'version': {'type': 'string', 'example': '1.0.0'},
+                            'service': {'type': 'string', 'example': 'respira-ally-web-app'}
+                        }
+                    }
+                }
+            }
+        }
+    }
+})
+def container_health_check():
+    """容器健康檢查端點"""
+    from flask import jsonify
+    from datetime import datetime
+    import os
+    
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'version': os.getenv('APP_VERSION', '1.0.0'),
+        'service': 'respira-ally-web-app'
+    }), 200

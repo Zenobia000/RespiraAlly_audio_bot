@@ -66,14 +66,17 @@
 
     .brand img {
       box-sizing: border-box;
-      width: 40%;
-      margin-top: 80px;
+      width: 8%;
+      margin-top: 50px;
     }
 
     .brand .name {
-      font-weight: 700;
-      color: #214053;
-      font-size: 18px
+      margin-top: 60px;
+      margin-left: -5px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      color: #6AC6CC;
+      font-size: 26px
     }
 
     main {
@@ -138,8 +141,9 @@
       left: 50%;
       top: -18%;
       transform: translateX(-50%);
-      max-width: 92%;
-      padding: .6rem .9rem;
+      inline-size: clamp(280px, 92%, 560px);
+      /* 最小/相對/最大寬 */
+      box-sizing: border-box;
       /* border-radius: 14px; */
       /* background: rgba(34, 55, 74, .22); */
       backdrop-filter: blur(8px);
@@ -209,7 +213,7 @@
       position: fixed;
       left: 0;
       right: 0;
-      bottom: 120px;
+      bottom: 50px;
       padding: 0 16px
     }
 
@@ -240,7 +244,7 @@
     }
 
     .btn:active {
-      transform: scale(.96);
+      transform: scale(1.16);
       box-shadow: 0 6px 20px rgba(92, 214, 254, .5), inset 0 1px 8px rgba(255, 255, 255, .55)
     }
 
@@ -286,11 +290,12 @@
     /* accessibility: larger base sizes */
     @media (min-width: 480px) {
       .overlay {
-        font-size: 19px
+        font-size: 32px
       }
 
       .label {
-        font-size: 19px
+        padding-top: 20px;
+        font-size: 30px
       }
     }
   </style>
@@ -381,7 +386,7 @@
 
       return html`
           <header>
-            <div class="brand"><img src="logo demo3.png" alt="RespiraAlly" /><span class="name"></span></div>
+            <div class="brand"><img src="logo demo2.png" alt="RespiraAlly" /><span class="name">RespiraAlly</span></div>
           </header>
           <main>
             <div class="stage">

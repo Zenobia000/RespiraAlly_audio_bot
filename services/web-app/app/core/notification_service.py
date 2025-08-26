@@ -6,17 +6,12 @@ import threading # 用於在背景執行緒中運行監聽器，避免阻塞主�
 import time # 用於在重試連線時暫停
 import logging # 用於記錄錯誤日誌
 from functools import partial # 用於包裝回呼函式，傳遞額外參數
-from app.extensions import socketio # 導入 Socket.IO 擴展，用於 WebSocket 通訊
-from app.core.chat_repository import ChatRepository # 導入聊天記錄的資料庫操作模組 (此處未實際使用)
+from app.extensions import db, socketio
+from app.models.models import UserAlert
 
 def message_callback(ch, method, properties, body, app):
     """
-    處理從 RabbitMQ 收到的訊息。此函式會在 Flask 的應用程式上下文中執行。
-    ch: channel 物件
-    method: 訊息傳遞的元數據
-    properties: 訊息的屬性
-    body: 訊息的內容 (bytes)
-    app: Flask 應用程式實例
+    處理從 RabbitMQ 收到的聊天通知訊息。
     """
     # 確保在 Flask 的應用程式上下文 (app_context) 中執行，以便能使用 Flask 的擴展功能
     with app.app_context():
@@ -72,6 +67,37 @@ def message_callback(ch, method, properties, body, app):
         # 這樣 RabbitMQ 才會將該訊息從佇列中移除
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
+def alert_callback(ch, method, properties, body, app):
+    """
+    處理從 RabbitMQ 收到的緊急警示訊息，並存入資料庫。
+    """
+    with app.app_context():
+        print(f" [!] 收到緊急警示: {body.decode()}", flush=True)
+        try:
+            data = json.loads(body)
+            user_id = data.get("user_id")
+            reason = data.get("reason")
+
+            if not user_id or not reason:
+                raise ValueError("警示訊息缺少 'user_id' 或 'reason' 欄位。")
+
+            # 建立 UserAlert 物件並存入資料庫
+            new_alert = UserAlert(
+                user_id=user_id,
+                message=reason
+            )
+            db.session.add(new_alert)
+            db.session.commit()
+            print(f" [db] 已將 user_id: {user_id} 的警示存入資料庫。")
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logging.error(f"無效的警示訊息格式或 JSON 解碼失敗: {e}")
+        except Exception as e:
+            logging.error(f" [!] 處理警示訊息時發生錯誤: {e}", exc_info=True)
+            db.session.rollback()
+        
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+
 def start_notification_listener(app):
     """
     在一個背景執行緒中啟動 RabbitMQ 監聽器。
@@ -85,12 +111,12 @@ def start_notification_listener(app):
 
 def listen_for_notifications(app):
     """
-    連接到 RabbitMQ 並監聽來自 ai-worker 的通知。
-    這個函式會在一個無限循環中運行，以確保連線的穩定性。
+    連接到 RabbitMQ 並監聽來自 ai-worker 的通知和警示。
     """
     # 從環境變數讀取 RabbitMQ 的主機和佇列名稱，若無則使用預設值
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "rabbitmq")
     notification_queue = os.environ.get("RABBITMQ_NOTIFICATION_QUEUE", "notifications_queue")
+    alert_queue = os.environ.get("RABBITMQ_ALERT_QUEUE", "alert_queue")
 
     # 無限循環，用於自動重連
     while True:
@@ -98,18 +124,20 @@ def listen_for_notifications(app):
             # 建立與 RabbitMQ 的連線
             connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host))
             channel = connection.channel()
-            # 宣告一個持久化的 (durable) 佇列，確保 RabbitMQ 重啟後訊息不會遺失
+
+            # 宣告聊天通知佇列
             channel.queue_declare(queue=notification_queue, durable=True)
-            print(' [*] 通知監聽器已啟動，等待訊息中。按 CTRL+C 離開')
-
-            # # 使用 functools.partial 將 app 參數預先綁定到 message_callback 函式
-            # # 因為 pika 的回呼函式簽名不包含 app 參數，需要透過這種方式傳遞
+            print(f' [*] 監聽器已啟動，監聽 {notification_queue}...')
             on_message_callback = partial(message_callback, app=app)
-
-            # # 設定消費者 (consumer)，指定從哪個佇列接收訊息以及處理訊息的回呼函式
             channel.basic_consume(queue=notification_queue, on_message_callback=on_message_callback)
-            # # 開始監聽，此為一個阻塞操作，會一直等待訊息進來
 
+            # 宣告緊急警示佇列
+            channel.queue_declare(queue=alert_queue, durable=True)
+            print(f' [*] 監聽器已啟動，監聽 {alert_queue}...')
+            on_alert_callback = partial(alert_callback, app=app)
+            channel.basic_consume(queue=alert_queue, on_message_callback=on_alert_callback)
+
+            print(' [*] 等待訊息中。按 CTRL+C 離開')
             channel.start_consuming()
 
         except pika.exceptions.AMQPConnectionError as e:
