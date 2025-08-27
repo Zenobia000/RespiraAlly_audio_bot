@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { usePatients, useAlerts } from "../../../shared/api/hooks";
 import { RISK_LEVELS } from "../../../shared/config";

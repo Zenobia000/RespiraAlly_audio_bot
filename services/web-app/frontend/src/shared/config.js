@@ -1,15 +1,15 @@
-// 環境配置
-export const API_BASE_URL = import.meta.env.DEV
-  ? "/api" // 開發模式使用 Vite 代理
-  : import.meta.env.VITE_API_BASE_URL || "/api/v1";
+// 環境配置 - 優先使用相對路徑，避免 Mixed Content 問題
+export const API_BASE_URL = "/api/v1";
+// 僅在開發環境且需要外部API時使用絕對路徑
+export const EXTERNAL_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 export const LIFF_ID = import.meta.env.VITE_LIFF_ID || "";
 export const ENABLE_MOCK = import.meta.env.VITE_ENABLE_MOCK === "true";
 export const ENV = import.meta.env.VITE_ENV || "development";
 
 // 功能旗標
 export const FLAGS = {
-  OVERVIEW_READY: true, // 總覽 API 已就緒 ✅
-  PATIENT_KPIS_READY: true, // 個案 KPI API 已就緒 ✅
+  OVERVIEW_READY: true, // 總覽 API 後端已啟動 ✅
+  PATIENT_KPIS_READY: true, // 個案 KPI API 後端已啟動 ✅
   AI_ALERTS_READY: false, // AI 即時通報未就緒
   ENABLE_TASK_DRAG: true, // 任務 API 已就緒 ✅
   ENABLE_EDU_EDIT: true, // 衛教資源 API 已就緒 ✅
@@ -56,8 +56,10 @@ export const API_ENDPOINTS = {
   EDUCATION_CATEGORIES: "/education/categories",
   EDUCATION_BATCH: "/education/batch",
 
-  // API Base URL (for fetch operations)
+  // API Base URL (for fetch operations) - 統一使用相對路徑
   BASE_URL: API_BASE_URL,
+  // 外部API URL (僅在特殊情況下使用)
+  EXTERNAL_BASE_URL: EXTERNAL_API_BASE_URL,
 };
 
 // 主題配置

@@ -1,12 +1,12 @@
 import { useState, useRef } from "react";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
 import bgImageUrl from "@assets/毛玻璃_BG2.png";
 import logoImageUrl from "@assets/logo demo3.png";
 
 const PLACEHOLDER = "今天想跟艾莉分享什麼呢？";
 
 const VoiceChat = () => {
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [overlayText, setOverlayText] = useState("");

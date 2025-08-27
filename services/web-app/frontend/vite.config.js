@@ -20,11 +20,15 @@ export default defineConfig(({ command, mode }) => {
   });
 
   return {
-    // 設定基礎路徑，對應 nginx 的 /static/dist/ 路徑
-    base: "/static/dist/",
+    // 設定基礎路徑為根路徑，標準 SPA 部署模式
+    base: "/",
 
     plugins: [
-      react(),
+      react({
+        babel: {
+          plugins: [["styled-jsx/babel", { optimizeForSpeed: true }]],
+        },
+      }),
       // 開發模式下啟用 ESLint (寬鬆模式)
       ...(command === "serve"
         ? [
@@ -90,23 +94,40 @@ export default defineConfig(({ command, mode }) => {
         "/api": {
           target: env.VITE_API_BASE_URL || "http://localhost:5000",
           changeOrigin: true,
-          secure: false,
+          // 🔧 修正：對於 ngrok HTTPS，設定 secure: true 並正確處理證書
+          secure: env.VITE_API_BASE_URL?.startsWith("https://") ? true : false,
           rewrite: (path) => path.replace(/^\/api/, "/api/v1"),
           configure: (proxy, _options) => {
-            proxy.on("error", (err, _req, _res) => {
-              console.log("proxy error", err);
+            proxy.on("error", (err, req, res) => {
+              console.error("🚨 Proxy error:", err.message);
+              console.error("Request URL:", req.url);
+              // 返回更友好的錯誤訊息
+              if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  error: {
+                    code: "PROXY_ERROR",
+                    message: "API 代理錯誤，請檢查後端服務狀態"
+                  }
+                }));
+              }
             });
             proxy.on("proxyReq", (proxyReq, req, _res) => {
               console.log(
-                "Sending Request to the Target:",
+                "🔄 Proxy Request:",
                 req.method,
-                req.url
+                req.url,
+                "→",
+                proxyReq.path
               );
             });
             proxy.on("proxyRes", (proxyRes, req, _res) => {
+              const status = proxyRes.statusCode;
+              const statusIcon = status >= 400 ? "❌" : status >= 300 ? "⚠️" : "✅";
               console.log(
-                "Received Response from the Target:",
-                proxyRes.statusCode,
+                `${statusIcon} Proxy Response:`,
+                status,
                 req.url
               );
             });

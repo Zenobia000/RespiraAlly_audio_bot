@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
 import bgImageUrl from "@assets/毛玻璃_BG2.png";
 
 // CAT 問卷題目
@@ -137,7 +137,7 @@ const CAT_QUESTIONS = [
 
 const CATForm = () => {
   const navigate = useNavigate();
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);

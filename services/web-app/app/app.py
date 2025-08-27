@@ -14,6 +14,7 @@ from .api.voice import bp as voice_bp  # Import voice API blueprint
 from .api.education import education_bp  # Import education API blueprint
 from .api.overview import overview_bp  # Import overview API blueprint
 from .api.tasks import tasks_bp  # Import tasks API blueprint
+from .api.debug_test import debug_bp  # Import debug test blueprint
 from .core.notification_service import start_notification_listener
 from .middleware.error_handler import register_error_handlers
 
@@ -64,12 +65,13 @@ def create_app(config_name="default"):
     app.register_blueprint(education_bp)  # Register the education API blueprint
     app.register_blueprint(overview_bp)  # Register the overview API blueprint
     app.register_blueprint(tasks_bp)  # Register the tasks API blueprint
+    app.register_blueprint(debug_bp)  # Register the debug test blueprint
 
     # 4. 註冊統一的錯誤處理器
     register_error_handlers(app)
 
     # 靜態檔案路由 - 服務 React 建置檔案
-    @app.route('/static/dist/<path:filename>')
+    @app.route('/static/<path:filename>')
     def serve_react_static(filename):
         from flask import send_from_directory
         return send_from_directory(os.path.join(app.static_folder, 'dist'), filename)

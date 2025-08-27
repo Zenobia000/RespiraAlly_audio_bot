@@ -17,7 +17,7 @@ patients_bp = Blueprint('patients', __name__, url_prefix='/api/v1')
     'parameters': [
         {'name': 'page', 'in': 'query', 'type': 'integer', 'default': 1, 'description': '頁碼'},
         {'name': 'per_page', 'in': 'query', 'type': 'integer', 'default': 20, 'description': '每頁數量'},
-        {'name': 'risk', 'in': 'query', 'type': 'string', 'enum': ['high', 'medium', 'low'], 'description': '風險等級篩選'},
+        {'name': 'risk', 'in': 'query', 'type': 'string', 'description': '風險等級篩選 (high, medium, low)', 'required': False},
         {'name': 'limit', 'in': 'query', 'type': 'integer', 'description': '限制返回數量（覆蓋per_page）'},
         {'name': 'sort_by', 'in': 'query', 'type': 'string', 'default': 'created_at', 'description': '排序欄位'},
         {'name': 'order', 'in': 'query', 'type': 'string', 'default': 'desc', 'enum': ['asc', 'desc'], 'description': '排序順序'}

@@ -191,5 +191,5 @@ VITE_DISABLE_LIFF=true
 
 完整的 LIFF 頁面範例請參考：
 
-- `src/apps/liff/pages/Dashboard.jsx`
+- `src/apps/liff/pages/PatientHome.jsx`
 - `src/apps/liff/pages/DailyMetrics.jsx`

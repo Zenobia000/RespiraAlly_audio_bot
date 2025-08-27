@@ -14,20 +14,23 @@ import {
 export const usePatients = (params = {}) => {
   return useQuery({
     queryKey: ["patients", params],
-    queryFn: () => {
+    queryFn: async () => {
       if (ENABLE_MOCK) return Promise.resolve(mockPatients);
 
       // 過濾掉 undefined 和空字符串的參數
       const filteredParams = Object.fromEntries(
         Object.entries(params).filter(
-          ([_, value]) => value !== undefined && value !== null && value !== ""
+          ([, value]) => value !== undefined && value !== null && value !== ""
         )
       );
 
       const queryString = new URLSearchParams(filteredParams).toString();
-      return apiClient.get(
+      const response = await apiClient.get(
         `${API_ENDPOINTS.THERAPIST_PATIENTS}?${queryString}`
       );
+
+      // 提取 API 回傳的 data 欄位，確保回傳陣列格式
+      return response?.data || [];
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -37,7 +40,10 @@ export const usePatients = (params = {}) => {
 export const usePatientProfile = (id) => {
   return useQuery({
     queryKey: ["patient-profile", id],
-    queryFn: () => apiClient.get(API_ENDPOINTS.PATIENT_PROFILE(id)),
+    queryFn: async () => {
+      const response = await apiClient.get(API_ENDPOINTS.PATIENT_PROFILE(id));
+      return response?.data || {};
+    },
     enabled: !!id,
   });
 };
@@ -46,11 +52,12 @@ export const usePatientProfile = (id) => {
 export const usePatientMetrics = (id, params = {}) => {
   return useQuery({
     queryKey: ["patient-metrics", id, params],
-    queryFn: () => {
+    queryFn: async () => {
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(
+      const response = await apiClient.get(
         `${API_ENDPOINTS.PATIENT_DAILY_METRICS(id)}?${queryString}`
       );
+      return response?.data || [];
     },
     enabled: !!id,
   });
@@ -60,9 +67,12 @@ export const usePatientMetrics = (id, params = {}) => {
 export const useCatHistory = (id, params = {}) => {
   return useQuery({
     queryKey: ["cat", id, params],
-    queryFn: () => {
+    queryFn: async () => {
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(`${API_ENDPOINTS.PATIENT_CAT(id)}?${queryString}`);
+      const response = await apiClient.get(
+        `${API_ENDPOINTS.PATIENT_CAT(id)}?${queryString}`
+      );
+      return response?.data || [];
     },
     enabled: !!id,
   });
@@ -72,9 +82,12 @@ export const useCatHistory = (id, params = {}) => {
 export const useMmrcHistory = (id, params = {}) => {
   return useQuery({
     queryKey: ["mmrc", id, params],
-    queryFn: () => {
+    queryFn: async () => {
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(`${API_ENDPOINTS.PATIENT_MMRC(id)}?${queryString}`);
+      const response = await apiClient.get(
+        `${API_ENDPOINTS.PATIENT_MMRC(id)}?${queryString}`
+      );
+      return response?.data || [];
     },
     enabled: !!id,
   });
@@ -86,12 +99,15 @@ export const useMmrcHistory = (id, params = {}) => {
 export const useOverviewKpis = (params = {}) => {
   return useQuery({
     queryKey: ["overview-kpis", params],
-    queryFn: () => {
+    queryFn: async () => {
       if (!FLAGS.OVERVIEW_READY || ENABLE_MOCK) {
         return Promise.resolve(mockKpis);
       }
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(`${API_ENDPOINTS.OVERVIEW_KPIS}?${queryString}`);
+      const response = await apiClient.get(
+        `${API_ENDPOINTS.OVERVIEW_KPIS}?${queryString}`
+      );
+      return response?.data || {};
     },
   });
 };
@@ -100,12 +116,15 @@ export const useOverviewKpis = (params = {}) => {
 export const useOverviewTrends = (params = {}) => {
   return useQuery({
     queryKey: ["overview-trends", params],
-    queryFn: () => {
+    queryFn: async () => {
       if (!FLAGS.OVERVIEW_READY || ENABLE_MOCK) {
         return Promise.resolve(mockTrends);
       }
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(`${API_ENDPOINTS.OVERVIEW_TRENDS}?${queryString}`);
+      const response = await apiClient.get(
+        `${API_ENDPOINTS.OVERVIEW_TRENDS}?${queryString}`
+      );
+      return response?.data || {};
     },
   });
 };
@@ -114,14 +133,15 @@ export const useOverviewTrends = (params = {}) => {
 export const useOverviewAdherence = (params = {}) => {
   return useQuery({
     queryKey: ["overview-adherence", params],
-    queryFn: () => {
+    queryFn: async () => {
       if (!FLAGS.OVERVIEW_READY || ENABLE_MOCK) {
         return Promise.resolve(mockAdherence);
       }
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(
+      const response = await apiClient.get(
         `${API_ENDPOINTS.OVERVIEW_ADHERENCE}?${queryString}`
       );
+      return response?.data || {};
     },
   });
 };
@@ -133,11 +153,16 @@ export const usePatientKpis = (id, params = {}) => {
     queryFn: async () => {
       if (!FLAGS.PATIENT_KPIS_READY || ENABLE_MOCK) {
         // 從其他 API 計算 KPI
-        const [catData, mmrcData, metricsData] = await Promise.all([
+        const [catResponse, mmrcResponse, metricsResponse] = await Promise.all([
           apiClient.get(API_ENDPOINTS.PATIENT_CAT(id)),
           apiClient.get(API_ENDPOINTS.PATIENT_MMRC(id)),
           apiClient.get(API_ENDPOINTS.PATIENT_DAILY_METRICS(id)),
         ]);
+
+        // 提取資料
+        const catData = catResponse?.data || [];
+        const mmrcData = mmrcResponse?.data || [];
+        const metricsData = metricsResponse?.data || [];
 
         // 計算 KPI
         const latestCat = catData?.[0]?.score || 0;
@@ -241,7 +266,7 @@ export const useUpdateDailyMetric = () => {
 export const useAlerts = (since) => {
   return useQuery({
     queryKey: ["alerts", since],
-    queryFn: () => {
+    queryFn: async () => {
       if (!FLAGS.AI_ALERTS_READY || ENABLE_MOCK) {
         // Mock 通報
         return Promise.resolve([
@@ -259,7 +284,10 @@ export const useAlerts = (since) => {
           },
         ]);
       }
-      return apiClient.get(`${API_ENDPOINTS.ALERTS_LIVE}?since=${since || ""}`);
+      const response = await apiClient.get(
+        `${API_ENDPOINTS.ALERTS_LIVE}?since=${since || ""}`
+      );
+      return response?.data || [];
     },
     refetchInterval: FLAGS.AI_ALERTS_READY ? 30000 : false, // 30 秒輪詢
   });

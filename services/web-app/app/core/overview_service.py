@@ -43,42 +43,42 @@ class OverviewService:
             
             # 最新 CAT 分數 > 20 的病患
             latest_cat_subquery = db.session.query(
-                CATQuestionnaire.user_id,
-                func.max(CATQuestionnaire.created_at).label('latest')
-            ).group_by(CATQuestionnaire.user_id).subquery()
+                QuestionnaireCAT.user_id,
+                func.max(QuestionnaireCAT.created_at).label('latest')
+            ).group_by(QuestionnaireCAT.user_id).subquery()
             
-            high_risk_cat = db.session.query(func.count(func.distinct(CATQuestionnaire.user_id)))\
+            high_risk_cat = db.session.query(func.count(func.distinct(QuestionnaireCAT.user_id)))\
                 .join(
                     latest_cat_subquery,
                     and_(
-                        CATQuestionnaire.user_id == latest_cat_subquery.c.user_id,
-                        CATQuestionnaire.created_at == latest_cat_subquery.c.latest
+                        QuestionnaireCAT.user_id == latest_cat_subquery.c.user_id,
+                        QuestionnaireCAT.created_at == latest_cat_subquery.c.latest
                     )
                 )\
-                .join(HealthProfile, CATQuestionnaire.user_id == HealthProfile.user_id)\
+                .join(HealthProfile, QuestionnaireCAT.user_id == HealthProfile.user_id)\
                 .filter(
                     HealthProfile.staff_id == therapist_id,
-                    CATQuestionnaire.cat_score > 20
+                    QuestionnaireCAT.total_score > 20
                 ).scalar() or 0
             
             # 最新 mMRC >= 2 的病患
             latest_mmrc_subquery = db.session.query(
-                MMRCQuestionnaire.user_id,
-                func.max(MMRCQuestionnaire.created_at).label('latest')
-            ).group_by(MMRCQuestionnaire.user_id).subquery()
+                QuestionnaireMMRC.user_id,
+                func.max(QuestionnaireMMRC.created_at).label('latest')
+            ).group_by(QuestionnaireMMRC.user_id).subquery()
             
-            high_risk_mmrc = db.session.query(func.count(func.distinct(MMRCQuestionnaire.user_id)))\
+            high_risk_mmrc = db.session.query(func.count(func.distinct(QuestionnaireMMRC.user_id)))\
                 .join(
                     latest_mmrc_subquery,
                     and_(
-                        MMRCQuestionnaire.user_id == latest_mmrc_subquery.c.user_id,
-                        MMRCQuestionnaire.created_at == latest_mmrc_subquery.c.latest
+                        QuestionnaireMMRC.user_id == latest_mmrc_subquery.c.user_id,
+                        QuestionnaireMMRC.created_at == latest_mmrc_subquery.c.latest
                     )
                 )\
-                .join(HealthProfile, MMRCQuestionnaire.user_id == HealthProfile.user_id)\
+                .join(HealthProfile, QuestionnaireMMRC.user_id == HealthProfile.user_id)\
                 .filter(
                     HealthProfile.staff_id == therapist_id,
-                    MMRCQuestionnaire.mmrc_score >= 2
+                    QuestionnaireMMRC.score >= 2
                 ).scalar() or 0
             
             high_risk_patients = max(high_risk_cat, high_risk_mmrc)
@@ -86,11 +86,11 @@ class OverviewService:
             # 平均依從率（過去 7 天）
             seven_days_ago = datetime.utcnow() - timedelta(days=7)
             adherence_data = db.session.query(
-                func.avg(DailyMetric.medication_taken).label('med_adherence')
+                func.avg(DailyMetric.medication.cast(db.Integer).cast(db.Float)).label('med_adherence')
             ).join(HealthProfile, DailyMetric.user_id == HealthProfile.user_id)\
             .filter(
                 HealthProfile.staff_id == therapist_id,
-                DailyMetric.record_date >= seven_days_ago
+                DailyMetric.created_at >= seven_days_ago
             ).first()
             
             avg_adherence = 0
@@ -107,15 +107,19 @@ class OverviewService:
                 ).scalar() or 0
             
             # 低依從性病患數（< 60%）
-            low_adherence_patients = db.session.query(func.count(func.distinct(DailyMetric.user_id)))\
-                .join(HealthProfile, DailyMetric.user_id == HealthProfile.user_id)\
-                .filter(
-                    HealthProfile.staff_id == therapist_id,
-                    DailyMetric.record_date >= seven_days_ago
-                )\
-                .group_by(DailyMetric.user_id)\
-                .having(func.avg(DailyMetric.medication_taken) < 0.6)\
-                .count()
+            low_adherence_subquery = db.session.query(
+                DailyMetric.user_id,
+                func.avg(DailyMetric.medication.cast(db.Integer).cast(db.Float)).label('avg_med')
+            ).join(HealthProfile, DailyMetric.user_id == HealthProfile.user_id)\
+            .filter(
+                HealthProfile.staff_id == therapist_id,
+                DailyMetric.created_at >= seven_days_ago
+            )\
+            .group_by(DailyMetric.user_id)\
+            .having(func.avg(DailyMetric.medication.cast(db.Integer).cast(db.Float)) < 0.6)\
+            .subquery()
+            
+            low_adherence_patients = db.session.query(func.count(low_adherence_subquery.c.user_id)).scalar() or 0
             
             return {
                 "total_patients": total_patients,
@@ -146,44 +150,44 @@ class OverviewService:
             
             # CAT 分數趨勢
             cat_trends = db.session.query(
-                func.date(CATQuestionnaire.created_at).label('date'),
-                func.avg(CATQuestionnaire.cat_score).label('avg_score'),
-                func.count(CATQuestionnaire.id).label('count')
-            ).join(HealthProfile, CATQuestionnaire.user_id == HealthProfile.user_id)\
+                func.date(QuestionnaireCAT.created_at).label('date'),
+                func.avg(QuestionnaireCAT.total_score).label('avg_score'),
+                func.count(QuestionnaireCAT.id).label('count')
+            ).join(HealthProfile, QuestionnaireCAT.user_id == HealthProfile.user_id)\
             .filter(
                 HealthProfile.staff_id == therapist_id,
-                CATQuestionnaire.created_at >= start_date
+                QuestionnaireCAT.created_at >= start_date
             )\
-            .group_by(func.date(CATQuestionnaire.created_at))\
-            .order_by(func.date(CATQuestionnaire.created_at)).all()
+            .group_by(func.date(QuestionnaireCAT.created_at))\
+            .order_by(func.date(QuestionnaireCAT.created_at)).all()
             
             # mMRC 分數趨勢
             mmrc_trends = db.session.query(
-                func.date(MMRCQuestionnaire.created_at).label('date'),
-                func.avg(MMRCQuestionnaire.mmrc_score).label('avg_score'),
-                func.count(MMRCQuestionnaire.id).label('count')
-            ).join(HealthProfile, MMRCQuestionnaire.user_id == HealthProfile.user_id)\
+                func.date(QuestionnaireMMRC.created_at).label('date'),
+                func.avg(QuestionnaireMMRC.score).label('avg_score'),
+                func.count(QuestionnaireMMRC.id).label('count')
+            ).join(HealthProfile, QuestionnaireMMRC.user_id == HealthProfile.user_id)\
             .filter(
                 HealthProfile.staff_id == therapist_id,
-                MMRCQuestionnaire.created_at >= start_date
+                QuestionnaireMMRC.created_at >= start_date
             )\
-            .group_by(func.date(MMRCQuestionnaire.created_at))\
-            .order_by(func.date(MMRCQuestionnaire.created_at)).all()
+            .group_by(func.date(QuestionnaireMMRC.created_at))\
+            .order_by(func.date(QuestionnaireMMRC.created_at)).all()
             
             # 每日健康指標趨勢
             daily_trends = db.session.query(
-                DailyMetric.record_date.label('date'),
-                func.avg(DailyMetric.water_intake).label('avg_water'),
-                func.avg(DailyMetric.exercise_minutes).label('avg_exercise'),
-                func.avg(DailyMetric.medication_taken).label('avg_medication'),
+                func.date(DailyMetric.created_at).label('date'),
+                func.avg(DailyMetric.water_cc).label('avg_water'),
+                func.avg(DailyMetric.exercise_min).label('avg_exercise'),
+                func.avg(DailyMetric.medication.cast(db.Integer).cast(db.Float)).label('avg_medication'),
                 func.count(func.distinct(DailyMetric.user_id)).label('active_users')
             ).join(HealthProfile, DailyMetric.user_id == HealthProfile.user_id)\
             .filter(
                 HealthProfile.staff_id == therapist_id,
-                DailyMetric.record_date >= start_date
+                DailyMetric.created_at >= start_date
             )\
-            .group_by(DailyMetric.record_date)\
-            .order_by(DailyMetric.record_date).all()
+            .group_by(func.date(DailyMetric.created_at))\
+            .order_by(func.date(DailyMetric.created_at)).all()
             
             return {
                 "cat_trends": [
@@ -231,11 +235,11 @@ class OverviewService:
             # 依從性分布
             adherence_data = db.session.query(
                 DailyMetric.user_id,
-                func.avg(DailyMetric.medication_taken).label('adherence_rate')
+                func.avg(DailyMetric.medication.cast(db.Integer).cast(db.Float)).label('adherence_rate')
             ).join(HealthProfile, DailyMetric.user_id == HealthProfile.user_id)\
             .filter(
                 HealthProfile.staff_id == therapist_id,
-                DailyMetric.record_date >= seven_days_ago
+                DailyMetric.created_at >= seven_days_ago
             )\
             .group_by(DailyMetric.user_id).all()
             
@@ -263,7 +267,7 @@ class OverviewService:
                 if user:
                     patient_adherence.append({
                         "patient_id": user.id,
-                        "patient_name": user.name,
+                        "patient_name": f"{user.first_name} {user.last_name}".strip(),
                         "adherence_rate": round(rate, 1)
                     })
             
@@ -300,18 +304,18 @@ class OverviewService:
             thirty_days_ago = datetime.utcnow() - timedelta(days=30)
             
             # 功能使用統計（過去 7 天）
-            cat_usage = db.session.query(func.count(CATQuestionnaire.id))\
-                .join(HealthProfile, CATQuestionnaire.user_id == HealthProfile.user_id)\
+            cat_usage = db.session.query(func.count(QuestionnaireCAT.id))\
+                .join(HealthProfile, QuestionnaireCAT.user_id == HealthProfile.user_id)\
                 .filter(
                     HealthProfile.staff_id == therapist_id,
-                    CATQuestionnaire.created_at >= seven_days_ago
+                    QuestionnaireCAT.created_at >= seven_days_ago
                 ).scalar() or 0
             
-            mmrc_usage = db.session.query(func.count(MMRCQuestionnaire.id))\
-                .join(HealthProfile, MMRCQuestionnaire.user_id == HealthProfile.user_id)\
+            mmrc_usage = db.session.query(func.count(QuestionnaireMMRC.id))\
+                .join(HealthProfile, QuestionnaireMMRC.user_id == HealthProfile.user_id)\
                 .filter(
                     HealthProfile.staff_id == therapist_id,
-                    MMRCQuestionnaire.created_at >= seven_days_ago
+                    QuestionnaireMMRC.created_at >= seven_days_ago
                 ).scalar() or 0
             
             daily_metric_usage = db.session.query(func.count(DailyMetric.id))\
@@ -385,15 +389,15 @@ class OverviewService:
             total_with_two_assessments = 0
             
             for patient in patients:
-                recent_cats = db.session.query(CATQuestionnaire)\
-                    .filter(CATQuestionnaire.user_id == patient.user_id)\
-                    .order_by(CATQuestionnaire.created_at.desc())\
+                recent_cats = db.session.query(QuestionnaireCAT)\
+                    .filter(QuestionnaireCAT.user_id == patient.user_id)\
+                    .order_by(QuestionnaireCAT.created_at.desc())\
                     .limit(2).all()
                 
                 if len(recent_cats) >= 2:
                     total_with_two_assessments += 1
                     # 如果最新的分數比之前的低，表示改善
-                    if recent_cats[0].cat_score < recent_cats[1].cat_score:
+                    if recent_cats[0].total_score < recent_cats[1].total_score:
                         improved_count += 1
             
             if total_with_two_assessments > 0:

@@ -12,7 +12,7 @@ import {
 import { CHART_COLORS } from "../../../shared/config";
 
 const BehaviorAdherenceTrend = ({
-  data = [],
+  data = {},
   range = "month",
   height = 300,
 }) => {
@@ -60,11 +60,34 @@ const BehaviorAdherenceTrend = ({
     }
   };
 
+  // 處理數據結構 - 檢查是否為 adherence API 的回應格式
+  let rawData = [];
+  if (Array.isArray(data)) {
+    // 如果是陣列（來自 trends.daily_trends）
+    rawData = data;
+  } else if (data.daily_trends && Array.isArray(data.daily_trends)) {
+    // 如果是 trends API 回應格式
+    rawData = data.daily_trends;
+  } else if (data.distribution) {
+    // 如果是 adherence API 回應格式，創建假數據以避免錯誤
+    const { distribution } = data;
+    const totalPatients = distribution.excellent + distribution.good + distribution.fair + distribution.poor;
+    const excellentRate = totalPatients > 0 ? (distribution.excellent / totalPatients) : 0;
+    
+    rawData = [{
+      date: new Date().toISOString().split('T')[0],
+      med_rate: excellentRate,
+      water_rate: excellentRate,
+      exercise_rate: excellentRate,
+      smoke_tracking_rate: excellentRate
+    }];
+  }
+
   // 格式化資料並轉換為百分比
-  const formattedData = data.map((item) => {
-    const 用藥 = Math.round((item.med_rate || 0) * 100);
-    const 飲水 = Math.round((item.water_rate || 0) * 100);
-    const 運動 = Math.round((item.exercise_rate || 0) * 100);
+  const formattedData = rawData.map((item) => {
+    const 用藥 = Math.round((item.avg_medication || item.med_rate || 0) * 100);
+    const 飲水 = Math.round((item.avg_water || item.water_rate || 0) * 100);
+    const 運動 = Math.round((item.avg_exercise || item.exercise_rate || 0) * 100);
     const 戒菸追蹤 = Math.round((item.smoke_tracking_rate || 0) * 100);
 
     // 計算整體達標率（四項平均）

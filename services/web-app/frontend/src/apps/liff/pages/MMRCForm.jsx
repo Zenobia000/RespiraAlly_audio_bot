@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
 import bgImageUrl from "@assets/毛玻璃_BG2.png";
 
 // mMRC 呼吸困難量表題目
@@ -57,7 +57,7 @@ const MMRC_OPTIONS = [
 
 const MMRCForm = () => {
   const navigate = useNavigate();
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
   const [selectedGrade, setSelectedGrade] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);

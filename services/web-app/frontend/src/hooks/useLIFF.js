@@ -48,34 +48,15 @@ export const useLIFF = () => {
     authProcessing: false,
   });
 
-  // 如果不在 LIFF 路由中，返回空的實現（Dashboard 等其他路由）
-  if (!isLiffRoute) {
-    return {
-      isLoggedIn: false,
-      profile: null,
-      isInClient: false,
-      isReady: false,
-      error: null,
-      idToken: null,
-      needsRegistration: false,
-      authProcessing: false,
-      login: () => console.log("非 LIFF 路由，忽略登入"),
-      logout: () => console.log("非 LIFF 路由，忽略登出"),
-      handleRegisterSuccess: () => console.log("非 LIFF 路由，忽略註冊"),
-      getAccessToken: () => null,
-      openExternalBrowser: (url) => window.open(url, "_blank"),
-      closeWindow: () => console.log("非 LIFF 路由，忽略關閉"),
-      shareMessage: () => Promise.resolve(false),
-      isBackendAuthenticated: false,
-      backendUser: null,
-    };
-  }
-
   // LIFF 路由：根據環境決定使用 Mock 或真實 LIFF
   const useMockMode =
     isDevelopment || enableMock || disableLiff || forceDevMode;
 
   useEffect(() => {
+    // 只在 LIFF 路由中初始化
+    if (!isLiffRoute) {
+      return;
+    }
     const initializeLiff = async () => {
       setState((prev) => ({ ...prev, authProcessing: true, error: null }));
 
@@ -171,11 +152,9 @@ export const useLIFF = () => {
       }
     };
 
-    // 只在 LIFF 路由中初始化
-    if (isLiffRoute) {
-      initializeLiff();
-    }
-  }, [isLiffRoute, useMockMode, liffId]);
+    // 初始化 LIFF
+    initializeLiff();
+  }, [isLiffRoute, useMockMode]);
 
   // LIFF 功能函數
   const login = () => {
@@ -258,6 +237,29 @@ export const useLIFF = () => {
       return false;
     }
   };
+
+  // 如果不在 LIFF 路由中，返回空的實現（Dashboard 等其他路由）
+  if (!isLiffRoute) {
+    return {
+      isLoggedIn: false,
+      profile: null,
+      isInClient: false,
+      isReady: false,
+      error: null,
+      idToken: null,
+      needsRegistration: false,
+      authProcessing: false,
+      login: () => console.log("非 LIFF 路由，忽略登入"),
+      logout: () => console.log("非 LIFF 路由，忽略登出"),
+      handleRegisterSuccess: () => console.log("非 LIFF 路由，忽略註冊"),
+      getAccessToken: () => null,
+      openExternalBrowser: (url) => window.open(url, "_blank"),
+      closeWindow: () => console.log("非 LIFF 路由，忽略關閉"),
+      shareMessage: () => Promise.resolve(false),
+      isBackendAuthenticated: false,
+      backendUser: null,
+    };
+  }
 
   return {
     ...state,

@@ -24,15 +24,15 @@ import {
   FireOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { authService } from "../../../services/authService";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
+
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
 import bgImageUrl from "@assets/毛玻璃_BG2.png";
 
 const { Title, Text, Paragraph } = Typography;
 
 const RegisterPage = () => {
   const navigate = useNavigate();
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
 

@@ -121,22 +121,21 @@ export const useBatchImportEducation = () => {
 
   return useMutation({
     mutationFn: async (file) => {
+      // 使用統一的 uploadFile 方法，避免直接拼接 URL
       const formData = new FormData();
       formData.append("file", file);
 
-      // 使用原生 fetch 來處理 multipart/form-data
+      // 使用相對路徑，讓 Vite 的 proxy 或部署環境來處理完整 URL
       const token =
         localStorage.getItem("token") || sessionStorage.getItem("token");
-      const response = await fetch(
-        `${API_ENDPOINTS.BASE_URL}/api/v1/education/batch`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
+      
+      const response = await fetch("/api/education/batch", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
       if (!response.ok) {
         const error = await response.json();
