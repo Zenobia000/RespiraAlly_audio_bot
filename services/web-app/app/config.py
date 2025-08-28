@@ -47,6 +47,10 @@ class Config:
     # LIFF 設定：後端使用 LIFF_CHANNEL_ID（前端 liff.html 常數名為 LIFF_ID，值相同）
     LIFF_CHANNEL_ID = os.getenv("LIFF_CHANNEL_ID")
 
+    # LINE Rich Menu 設定
+    LINE_RICH_MENU_ID_GUEST = os.getenv("LINE_RICH_MENU_ID_GUEST")
+    LINE_RICH_MENU_ID_MEMBER = os.getenv("LINE_RICH_MENU_ID_MEMBER")
+
     # APScheduler 設定
     SCHEDULER_JOBSTORES = {
         "default": {"type": "sqlalchemy", "url": os.getenv("DATABASE_URL")}
@@ -61,6 +65,12 @@ class Config:
     SCHEDULER_TIMEZONE = "Asia/Taipei"
 
     BASE_URL = os.getenv("BASE_URL")
+    
+    # Milvus 設定
+    MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
+    
+    # OpenAI 設定（用於 embedding）
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 class DevelopmentConfig(Config):

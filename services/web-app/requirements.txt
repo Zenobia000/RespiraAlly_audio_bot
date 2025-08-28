@@ -22,3 +22,17 @@ line-bot-sdk==3.17.1
 mutagen==1.47.0
 apscheduler==3.10.4
 Flask-APScheduler==1.13.1
+# 向量資料庫和 AI 相關
+pymilvus==2.3.7
+openai==1.35.0  # 使用更新的穩定版本
+marshmallow==3.20.1  # 修復 pymilvus 依賴問題
+environs==9.5.0  # 符合 pymilvus 要求
+httpx==0.25.0  # 指定 httpx 版本
+
+# 資料處理（使用預編譯版本）
+numpy==1.24.3  # 固定 numpy 版本以避免衝突
+pandas==2.0.3
+openpyxl==3.1.2
+
+# 確保 grpcio 使用預編譯版本
+grpcio>=1.57.0,<1.60.0

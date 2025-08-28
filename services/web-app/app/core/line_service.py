@@ -139,9 +139,6 @@ class LineService:
                     queue_name=task_queue_name,
                     message_body={'patient_id': user.id, 'text': event.message.text}
                 )
-
-                # 回覆使用者，告知訊息已收到並正在處理
-                self._reply_text(event.reply_token, "我們已收到您的訊息，AI 正在處理中。")
             except Exception as e:
                 current_app.logger.error(f"處理使用者 {user.id} 的文字訊息時發生錯誤: {e}", exc_info=True)
 

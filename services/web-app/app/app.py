@@ -11,7 +11,14 @@ from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
 from .api.chat import bp as chat_bp  # Explicitly import and alias the blueprint
 from .api.voice import bp as voice_bp  # Import voice API blueprint
+from .api.education import education_bp  # Import education API blueprint
+from .api.overview import overview_bp  # Import overview API blueprint
+from .api.tasks import tasks_bp  # Import tasks API blueprint
+from .api.debug_test import debug_bp  # Import debug test blueprint
+from .api.alerts import alerts_bp  # Import alerts API blueprint
 from .core.notification_service import start_notification_listener
+from .middleware.error_handler import register_error_handlers
+from .middleware.monitoring import init_monitoring
 
 # 從原本示範任務，改為引入實際排程任務（保留原檔案中的示範函式，不再註冊）
 from .core.scheduler_service import scheduled_task
@@ -26,8 +33,8 @@ def create_app(config_name="default"):
     """
     應用程式工廠函數。
     """
-    # 設定靜態檔案目錄為包含 React 建置檔案的 static 目錄
-    static_folder = os.path.join(os.path.dirname(__file__), 'static')
+    # 設定靜態檔案目錄為包含 React 建置檔案的 frontend/dist 目錄
+    static_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist')
     app = Flask(__name__, static_folder=static_folder)
 
     # 1. 載入設定
@@ -57,37 +64,45 @@ def create_app(config_name="default"):
     app.register_blueprint(uploads_bp)
     app.register_blueprint(chat_bp)  # Register the aliased blueprint
     app.register_blueprint(voice_bp)  # Register the voice API blueprint
+    app.register_blueprint(education_bp)  # Register the education API blueprint
+    app.register_blueprint(overview_bp)  # Register the overview API blueprint
+    app.register_blueprint(tasks_bp)  # Register the tasks API blueprint
+    app.register_blueprint(debug_bp)  # Register the debug test blueprint
+    app.register_blueprint(alerts_bp)  # Register the alerts API blueprint
 
-    # 4. 註冊全域錯誤處理器
-    @app.errorhandler(404)
-    def not_found(error):
-        return jsonify({"error": "Not Found", "message": "您請求的資源不存在。"}), 404
-
-    @app.errorhandler(500)
-    def internal_error(error):
-        # 在實際應用中，這裡應該記錄錯誤
-        return (
-            jsonify(
-                {
-                    "error": "Internal Server Error",
-                    "message": "伺服器發生未預期的錯誤。",
-                }
-            ),
-            500,
-        )
+    # 4. 註冊統一的錯誤處理器和效能監控
+    register_error_handlers(app)
+    init_monitoring(app)
+    
+    # 5. 添加 CORS 支援 (開發環境)
+    @app.after_request
+    def after_request_cors(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Request-Id')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+    
+    @app.before_request
+    def handle_preflight():
+        from flask import request, make_response
+        if request.method == "OPTIONS":
+            response = make_response()
+            response.headers.add("Access-Control-Allow-Origin", "*")
+            response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Request-Id")
+            response.headers.add('Access-Control-Allow-Methods', "GET,PUT,POST,DELETE,OPTIONS")
+            return response
 
     # 靜態檔案路由 - 服務 React 建置檔案
-    @app.route('/static/dist/<path:filename>')
+    @app.route('/static/<path:filename>')
     def serve_react_static(filename):
         from flask import send_from_directory
-        return send_from_directory(os.path.join(app.static_folder, 'dist'), filename)
+        return send_from_directory(app.static_folder, filename)
     
     # 根路由，重導向到 React 應用程式
     @app.route("/")
     def index():
         from flask import send_from_directory
-        dist_folder = os.path.join(app.static_folder, 'dist')
-        return send_from_directory(dist_folder, 'index.html')
+        return send_from_directory(app.static_folder, 'index.html')
     
     # SPA 路由支援 - 捕獲所有非 API 路由，重導向到 React 應用程式
     @app.route('/<path:path>')
@@ -101,16 +116,14 @@ def create_app(config_name="default"):
         if '.' in path.split('/')[-1]:
             try:
                 from flask import send_from_directory
-                dist_folder = os.path.join(app.static_folder, 'dist')
-                return send_from_directory(dist_folder, path)
+                return send_from_directory(app.static_folder, path)
             except:
                 from flask import abort
                 abort(404)
         
         # 所有其他路由都返回 React 應用程式
         from flask import send_from_directory
-        dist_folder = os.path.join(app.static_folder, 'dist')
-        return send_from_directory(dist_folder, 'index.html')
+        return send_from_directory(app.static_folder, 'index.html')
 
     # WebSocket 事件處理
     @socketio.on("connect")

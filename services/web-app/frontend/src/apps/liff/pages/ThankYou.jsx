@@ -6,13 +6,14 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
+import bgImageUrl from "@assets/毛玻璃_BG2.png";
 
 const { Title, Text } = Typography;
 
 const ThankYou = () => {
   const navigate = useNavigate();
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
 
   useEffect(() => {
     if (enableVoice) {
@@ -41,7 +42,7 @@ const ThankYou = () => {
           left: 0;
           right: 0;
           bottom: 0;
-          background: url("/static/assets/毛玻璃_BG2.png") center/cover;
+          background: url(${bgImageUrl}) center/cover;
           opacity: 0.3;
           z-index: 0;
         }

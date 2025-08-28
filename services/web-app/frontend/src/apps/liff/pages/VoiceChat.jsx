@@ -1,12 +1,12 @@
 import { useState, useRef } from "react";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
-import bgImageUrl from "../../../assets/毛玻璃_BG2.png";
-import logoImageUrl from "../../../assets/logo demo3.png";
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
+import bgImageUrl from "@assets/毛玻璃_BG2.png";
+import logoImageUrl from "@assets/logo demo3.png";
 
 const PLACEHOLDER = "今天想跟艾莉分享什麼呢？";
 
 const VoiceChat = () => {
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [overlayText, setOverlayText] = useState("");
@@ -91,30 +91,82 @@ const VoiceChat = () => {
   };
 
   // 處理音訊
-  const processAudio = async () => {
+  const processAudio = async (audioBlob) => {
     setIsProcessing(true);
-    typeText("正在思考回應...");
+    typeText("正在處理語音...");
 
-    // 模擬 API 回應
-    setTimeout(() => {
-      const mockResponse =
-        "我理解您的感受。保持良好的呼吸習慣對COPD患者很重要。記得每天做呼吸訓練，並按時服藥。如果有任何不適，請立即聯繫您的醫師。";
+    try {
+      // 語音轉文字
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "audio.wav");
+
+      const transcribeResponse = await fetch("/api/v1/voice/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!transcribeResponse.ok) {
+        throw new Error("語音識別失敗");
+      }
+
+      const transcribeData = await transcribeResponse.json();
+      const userText = transcribeData.data?.text || transcribeData.text || "";
+
+      if (!userText) {
+        throw new Error("無法識別語音內容");
+      }
+
+      typeText("正在思考回應...");
+
+      // 發送聊天請求
+      const chatResponse = await fetch("/api/v1/voice/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: userText,
+          patient_id:
+            localStorage.getItem("patientId") ||
+            sessionStorage.getItem("patientId"),
+        }),
+      });
+
+      if (!chatResponse.ok) {
+        throw new Error("AI 回應失敗");
+      }
+
+      const chatData = await chatResponse.json();
+      const aiResponse =
+        chatData.data?.response || chatData.response || "抱歉，我無法回應。";
 
       // 添加到訊息列表
       setMessages((prev) => [
         ...prev,
-        { type: "user", content: "(語音訊息)" },
-        { type: "ai", content: mockResponse },
+        { type: "user", content: userText },
+        { type: "ai", content: aiResponse },
       ]);
 
-      typeText(mockResponse);
+      typeText(aiResponse);
 
       if (enableVoice) {
-        speak(mockResponse);
+        speak(aiResponse);
       }
 
       setIsProcessing(false);
-    }, 2000);
+    } catch (error) {
+      console.error("語音處理錯誤:", error);
+      const errorMessage = "語音處理失敗，請重試";
+
+      setMessages((prev) => [
+        ...prev,
+        { type: "user", content: "(語音訊息)" },
+        { type: "ai", content: errorMessage },
+      ]);
+
+      typeText(errorMessage);
+      setIsProcessing(false);
+    }
   };
 
   const handleRecordToggle = () => {

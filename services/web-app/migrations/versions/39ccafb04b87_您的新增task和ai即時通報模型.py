@@ -53,10 +53,20 @@ def upgrade():
     sa.ForeignKeyConstraint(['patient_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('apscheduler_jobs', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_apscheduler_jobs_next_run_time'))
-
-    op.drop_table('apscheduler_jobs')
+    # 檢查 apscheduler_jobs 表是否存在，如果存在才進行操作
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    
+    if 'apscheduler_jobs' in inspector.get_table_names():
+        # 檢查索引是否存在
+        indexes = inspector.get_indexes('apscheduler_jobs')
+        index_names = [idx['name'] for idx in indexes]
+        
+        if 'ix_apscheduler_jobs_next_run_time' in index_names:
+            with op.batch_alter_table('apscheduler_jobs', schema=None) as batch_op:
+                batch_op.drop_index(batch_op.f('ix_apscheduler_jobs_next_run_time'))
+        
+        op.drop_table('apscheduler_jobs')
     # ### end Alembic commands ###
 
 

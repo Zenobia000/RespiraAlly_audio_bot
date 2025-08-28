@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Education API Integration Test</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      h1 {
+        color: #333;
+        border-bottom: 2px solid #7cc6ff;
+        padding-bottom: 10px;
+      }
+      .test-section {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .test-result {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .pending {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeeba;
+      }
+      button {
+        background: #7cc6ff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #5cb8ff;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .data-display {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .test-controls {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🧪 Education API Integration Test</h1>
+
+    <div class="test-section">
+      <h2>1. 環境設定</h2>
+      <div>
+        <label>API Base URL:</label>
+        <input type="text" id="apiUrl" value="http://localhost:5000/api/v1" />
+      </div>
+      <div>
+        <label>JWT Token (從登入取得):</label>
+        <input type="text" id="jwtToken" placeholder="Bearer xxx..." />
+      </div>
+      <button onclick="testConnection()">測試連線</button>
+      <div id="connectionResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>2. 取得衛教資源列表</h2>
+      <button onclick="getEducationList()">取得列表</button>
+      <button onclick="getCategories()">取得類別</button>
+      <div id="listResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>3. 新增衛教資源</h2>
+      <input type="text" id="newCategory" placeholder="類別" value="測試類別" />
+      <input
+        type="text"
+        id="newQuestion"
+        placeholder="問題"
+        value="這是測試問題嗎？"
+      />
+      <textarea id="newAnswer" placeholder="答案" rows="3">
+是的，這是測試答案。</textarea
+      >
+      <input
+        type="text"
+        id="newKeywords"
+        placeholder="關鍵詞（選填）"
+        value="測試, test"
+      />
+      <textarea id="newNotes" placeholder="備註（選填）" rows="2">
+測試備註</textarea
+      >
+      <button onclick="createEducation()">新增</button>
+      <div id="createResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>4. 更新/刪除衛教資源</h2>
+      <input type="text" id="itemId" placeholder="項目 ID" />
+      <button onclick="updateEducation()">更新（使用上方資料）</button>
+      <button onclick="deleteEducation()">刪除</button>
+      <div id="modifyResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>5. 批量測試</h2>
+      <button onclick="runAllTests()">執行所有測試</button>
+      <button onclick="clearResults()">清除結果</button>
+      <div id="batchResult"></div>
+    </div>
+
+    <script>
+      const getApiUrl = () => document.getElementById("apiUrl").value;
+      const getToken = () => document.getElementById("jwtToken").value;
+
+      const apiCall = async (endpoint, method = "GET", body = null) => {
+        const url = `${getApiUrl()}${endpoint}`;
+        const options = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: getToken(),
+          },
+        };
+
+        if (body && method !== "GET") {
+          options.body = JSON.stringify(body);
+        }
+
+        try {
+          const response = await fetch(url, options);
+          const data = await response.json();
+          return { ok: response.ok, status: response.status, data };
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      };
+
+      const showResult = (elementId, success, message, data = null) => {
+        const element = document.getElementById(elementId);
+        const className = success ? "success" : "error";
+        let html = `<div class="test-result ${className}">${message}</div>`;
+        if (data) {
+          html += `<div class="data-display"><pre>${JSON.stringify(
+            data,
+            null,
+            2
+          )}</pre></div>`;
+        }
+        element.innerHTML = html;
+      };
+
+      async function testConnection() {
+        showResult("connectionResult", false, "測試中...", null);
+        const result = await apiCall("/education/categories");
+        if (result.ok) {
+          showResult("connectionResult", true, "✅ 連線成功！", result.data);
+        } else {
+          showResult(
+            "connectionResult",
+            false,
+            `❌ 連線失敗: ${result.status || result.error}`,
+            result.data
+          );
+        }
+      }
+
+      async function getEducationList() {
+        const result = await apiCall("/education?limit=5");
+        if (result.ok) {
+          showResult(
+            "listResult",
+            true,
+            `✅ 成功取得 ${result.data.data?.length || 0} 筆資料`,
+            result.data
+          );
+        } else {
+          showResult(
+            "listResult",
+            false,
+            `❌ 取得失敗: ${result.status}`,
+            result.data
+          );
+        }
+      }
+
+      async function getCategories() {
+        const result = await apiCall("/education/categories");
+        if (result.ok) {
+          showResult("listResult", true, `✅ 成功取得類別列表`, result.data);
+        } else {
+          showResult(
+            "listResult",
+            false,
+            `❌ 取得失敗: ${result.status}`,
+            result.data
+          );
+        }
+      }
+
+      async function createEducation() {
+        const data = {
+          category: document.getElementById("newCategory").value,
+          question: document.getElementById("newQuestion").value,
+          answer: document.getElementById("newAnswer").value,
+          keywords: document.getElementById("newKeywords").value,
+          notes: document.getElementById("newNotes").value,
+        };
+
+        const result = await apiCall("/education", "POST", data);
+        if (result.ok) {
+          showResult("createResult", true, "✅ 新增成功！", result.data);
+          // 記錄 ID 供後續測試
+          if (result.data.data?.id) {
+            document.getElementById("itemId").value = result.data.data.id;
+          }
+        } else {
+          showResult(
+            "createResult",
+            false,
+            `❌ 新增失敗: ${result.status}`,
+            result.data
+          );
+        }
+      }
+
+      async function updateEducation() {
+        const id = document.getElementById("itemId").value;
+        if (!id) {
+          showResult("modifyResult", false, "❌ 請輸入項目 ID");
+          return;
+        }
+
+        const data = {
+          category: document.getElementById("newCategory").value,
+          question: document.getElementById("newQuestion").value + " (已更新)",
+          answer: document.getElementById("newAnswer").value + " (已更新)",
+          keywords: document.getElementById("newKeywords").value,
+          notes: document.getElementById("newNotes").value,
+        };
+
+        const result = await apiCall(`/education/${id}`, "PUT", data);
+        if (result.ok) {
+          showResult("modifyResult", true, "✅ 更新成功！", result.data);
+        } else {
+          showResult(
+            "modifyResult",
+            false,
+            `❌ 更新失敗: ${result.status}`,
+            result.data
+          );
+        }
+      }
+
+      async function deleteEducation() {
+        const id = document.getElementById("itemId").value;
+        if (!id) {
+          showResult("modifyResult", false, "❌ 請輸入項目 ID");
+          return;
+        }
+
+        if (!confirm(`確定要刪除 ID: ${id} 的項目嗎？`)) {
+          return;
+        }
+
+        const result = await apiCall(`/education/${id}`, "DELETE");
+        if (result.ok) {
+          showResult("modifyResult", true, "✅ 刪除成功！", result.data);
+          document.getElementById("itemId").value = "";
+        } else {
+          showResult(
+            "modifyResult",
+            false,
+            `❌ 刪除失敗: ${result.status}`,
+            result.data
+          );
+        }
+      }
+
+      async function runAllTests() {
+        showResult("batchResult", false, "執行測試中...", null);
+
+        const results = [];
+
+        // Test 1: 連線測試
+        let result = await apiCall("/education/categories");
+        results.push({
+          test: "連線測試",
+          success: result.ok,
+          message: result.ok ? "成功" : `失敗: ${result.status}`,
+        });
+
+        // Test 2: 取得列表
+        result = await apiCall("/education?limit=5");
+        results.push({
+          test: "取得列表",
+          success: result.ok,
+          message: result.ok
+            ? `成功 (${result.data.data?.length || 0} 筆)`
+            : `失敗: ${result.status}`,
+        });
+
+        // Test 3: 新增資料
+        const testData = {
+          category: "自動測試",
+          question: `測試問題 ${Date.now()}`,
+          answer: "這是自動測試的答案",
+          keywords: "test, auto",
+          notes: "自動測試備註",
+        };
+        result = await apiCall("/education", "POST", testData);
+        const createdId = result.data?.data?.id;
+        results.push({
+          test: "新增資料",
+          success: result.ok,
+          message: result.ok
+            ? `成功 (ID: ${createdId})`
+            : `失敗: ${result.status}`,
+        });
+
+        // Test 4: 更新資料
+        if (createdId) {
+          const updateData = {
+            ...testData,
+            question: testData.question + " (已更新)",
+          };
+          result = await apiCall(`/education/${createdId}`, "PUT", updateData);
+          results.push({
+            test: "更新資料",
+            success: result.ok,
+            message: result.ok ? "成功" : `失敗: ${result.status}`,
+          });
+        }
+
+        // Test 5: 刪除資料
+        if (createdId) {
+          result = await apiCall(`/education/${createdId}`, "DELETE");
+          results.push({
+            test: "刪除資料",
+            success: result.ok,
+            message: result.ok ? "成功" : `失敗: ${result.status}`,
+          });
+        }
+
+        // 顯示結果
+        const allSuccess = results.every((r) => r.success);
+        const summary = `
+                <h3>${allSuccess ? "✅ 所有測試通過！" : "⚠️ 部分測試失敗"}</h3>
+                <ul>
+                    ${results
+                      .map(
+                        (r) => `
+                        <li class="${r.success ? "success" : "error"}">
+                            ${r.test}: ${r.message}
+                        </li>
+                    `
+                      )
+                      .join("")}
+                </ul>
+            `;
+
+        showResult("batchResult", allSuccess, summary);
+      }
+
+      function clearResults() {
+        [
+          "connectionResult",
+          "listResult",
+          "createResult",
+          "modifyResult",
+          "batchResult",
+        ].forEach((id) => (document.getElementById(id).innerHTML = ""));
+      }
+
+      // 初始化
+      window.onload = () => {
+        // 嘗試從 localStorage 讀取 token
+        const savedToken = localStorage.getItem("token");
+        if (savedToken) {
+          document.getElementById("jwtToken").value = `Bearer ${savedToken}`;
+        }
+      };
+    </script>
+  </body>
+</html>

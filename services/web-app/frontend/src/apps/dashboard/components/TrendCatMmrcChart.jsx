@@ -11,14 +11,24 @@ import {
 import { CHART_COLORS } from "../../../shared/config";
 import dayjs from "dayjs";
 
-const TrendCatMmrcChart = ({ data = [], height = 300 }) => {
+const TrendCatMmrcChart = ({ data = {}, height = 300 }) => {
+  // 從 API 回應中提取實際的趨勢數據
+  const catTrends = data?.cat_trends || [];
+  const mmrcTrends = data?.mmrc_trends || [];
+  
+  // 合併 CAT 和 mMRC 趨勢數據
+  const mergedData = catTrends.map((catItem, index) => {
+    const mmrcItem = mmrcTrends[index] || {};
+    return {
+      date: catItem.date || mmrcItem.date,
+      month: dayjs(catItem.date || mmrcItem.date).format("MM月"),
+      cat_avg: Number((catItem.avg_score || 0).toFixed(1)),
+      mmrc_avg: Number((mmrcItem.avg_score || 0).toFixed(1)),
+    };
+  });
+
   // 格式化資料
-  const formattedData = data.map((item) => ({
-    ...item,
-    month: dayjs(item.date).format("MM月"),
-    cat_avg: Number(item.cat_avg?.toFixed(1)),
-    mmrc_avg: Number(item.mmrc_avg?.toFixed(1)),
-  }));
+  const formattedData = mergedData;
 
   return (
     <ResponsiveContainer width="100%" height={height}>

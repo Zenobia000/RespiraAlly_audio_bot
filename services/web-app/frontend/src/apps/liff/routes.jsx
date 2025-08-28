@@ -2,7 +2,7 @@ import { lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 // LIFF 頁面
-const Dashboard = lazy(() => import("./pages/Dashboard"));
+const PatientHome = lazy(() => import("./pages/PatientHome"));
 const VoiceChat = lazy(() => import("./pages/VoiceChat"));
 const CATForm = lazy(() => import("./pages/CATForm"));
 const MMRCForm = lazy(() => import("./pages/MMRCForm"));
@@ -14,7 +14,7 @@ const LiffRoutes = () => {
   return (
     <Routes>
       {/* LIFF 主頁 */}
-      <Route path="/" element={<Dashboard />} />
+      <Route path="/" element={<PatientHome />} />
 
       {/* 功能頁面 */}
       <Route path="/voice-chat" element={<VoiceChat />} />

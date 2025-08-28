@@ -13,7 +13,9 @@ const TaskList = ({ tasks, onTaskClick, onStatusChange, onDelete }) => {
   ];
 
   const getTasksByStatus = (status) => {
-    return tasks.filter((task) => task.status === status);
+    return (Array.isArray(tasks) ? tasks : []).filter(
+      (task) => task.status === status
+    );
   };
 
   const handleDragStart = (e, task) => {

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { EDU_CATEGORIES } from "../../../shared/config";
 
 const EduItemCard = ({
   item,
   isEditing,
+  categories = [], // 從父組件傳入類別列表
   onEdit,
   onSave,
   onCancel,
@@ -30,7 +30,7 @@ const EduItemCard = ({
               setEditData({ ...editData, category: e.target.value })
             }
           >
-            {EDU_CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <option key={cat} value={cat}>
                 {cat}
               </option>
@@ -56,6 +56,25 @@ const EduItemCard = ({
               setEditData({ ...editData, answer: e.target.value })
             }
             rows="4"
+          />
+
+          <input
+            className="edit-input"
+            placeholder="關鍵詞（選填，以逗號分隔）..."
+            value={editData.keywords || ""}
+            onChange={(e) =>
+              setEditData({ ...editData, keywords: e.target.value })
+            }
+          />
+
+          <textarea
+            className="edit-input"
+            placeholder="注意事項或補充說明（選填）..."
+            value={editData.notes || ""}
+            onChange={(e) =>
+              setEditData({ ...editData, notes: e.target.value })
+            }
+            rows="2"
           />
         </div>
 
@@ -88,6 +107,18 @@ const EduItemCard = ({
       <div className="card-body">
         <h4 className="question">Q: {item.question}</h4>
         <p className="answer">A: {item.answer}</p>
+        {item.keywords && (
+          <div className="meta-info">
+            <span className="meta-label">關鍵詞：</span>
+            <span className="meta-value">{item.keywords}</span>
+          </div>
+        )}
+        {item.notes && (
+          <div className="meta-info">
+            <span className="meta-label">備註：</span>
+            <span className="meta-value">{item.notes}</span>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
@@ -161,7 +192,22 @@ const EduItemCard = ({
           font-size: 14px;
           color: var(--text);
           line-height: 1.6;
-          margin: 0;
+          margin: 0 0 8px 0;
+        }
+
+        .meta-info {
+          margin-top: 8px;
+          font-size: 12px;
+          color: var(--muted);
+        }
+
+        .meta-label {
+          font-weight: 500;
+          margin-right: 4px;
+        }
+
+        .meta-value {
+          color: var(--text);
         }
 
         .edit-input {

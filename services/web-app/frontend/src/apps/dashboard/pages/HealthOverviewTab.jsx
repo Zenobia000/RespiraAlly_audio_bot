@@ -6,7 +6,7 @@ import {
   usePatientMetrics,
   usePatients,
 } from "../../../shared/api/hooks";
-import { useGlobalFilters } from "../layouts/Layout";
+import { useGlobalFilters } from "../contexts/GlobalFiltersContext";
 import KpiRow from "../components/KpiRow";
 import TrendCatMmrcChart from "../components/TrendCatMmrcChart";
 import RiskAdherencePie from "../components/RiskAdherencePie";
@@ -74,20 +74,20 @@ const HealthOverviewTab = () => {
     usePatientMetrics(null, {
       from: localTimeRange.from,
       to: localTimeRange.to,
-      risk: globalFilters.riskFilter || undefined,
+      ...(globalFilters.riskFilter && { risk: globalFilters.riskFilter }),
     });
 
   // 取得病患列表（用於高風險和低依從性列表）
   const { data: allPatients = [], isLoading: patientsLoading } = usePatients({
-    risk: globalFilters.riskFilter || undefined,
+    ...(globalFilters.riskFilter && { risk: globalFilters.riskFilter }),
   });
 
   // 篩選高風險病患和低依從性病患
-  const highRiskPatients = allPatients
+  const highRiskPatients = (Array.isArray(allPatients) ? allPatients : [])
     .filter((p) => p.cat_score >= 20 || p.mmrc_score >= 2)
     .slice(0, 8);
 
-  const lowAdherencePatients = allPatients
+  const lowAdherencePatients = (Array.isArray(allPatients) ? allPatients : [])
     .filter((p) => (p.adherence_rate || 0) <= 0.6)
     .slice(0, 8);
 
