@@ -3,7 +3,7 @@
  * 衛教資源管理頁面
  * 使用 Milvus API 進行 CRUD 操作
  */
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   useEducationList,
   useEducationCategories,

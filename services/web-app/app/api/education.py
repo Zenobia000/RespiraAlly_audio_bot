@@ -19,6 +19,8 @@ education_bp = Blueprint('education', __name__, url_prefix='/api/v1/education')
 # 初始化 Milvus 服務
 milvus_service = get_milvus_education_service()
 
+# 修復 Flask 尾部斜杠重定向導致的 CORS 問題
+@education_bp.route('', methods=['GET'])
 @education_bp.route('/', methods=['GET'])
 @jwt_required()
 @swag_from({
@@ -121,6 +123,7 @@ def get_education_list():
 # 註：語意搜尋功能移至 ai-worker 使用
 # web-app 只提供 CRUD 功能給前端衛教卡片管理
 
+@education_bp.route('', methods=['POST'])
 @education_bp.route('/', methods=['POST'])
 @jwt_required()
 @swag_from({

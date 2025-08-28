@@ -109,6 +109,106 @@ def calculate_patient_risk(user_id):
         print(f"計算風險等級失敗: {e}")
         return 'low'
 
+def calculate_patient_kpis(patient_id, days=7):
+    """
+    計算個別病患的 KPI 指標
+    
+    Args:
+        patient_id: 病患ID
+        days: 計算天數範圍（默認7天）
+        
+    Returns:
+        dict: 包含各種 KPI 指標的字典
+    """
+    try:
+        from ..core.questionnaire_service import QuestionnaireService
+        from ..core.daily_metric_service import DailyMetricService
+        from datetime import datetime, timedelta
+        
+        # 服務實例
+        q_service = QuestionnaireService()
+        dm_service = DailyMetricService()
+        
+        # 計算日期範圍
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days)
+        
+        # 1. 獲取最新問卷分數
+        cat_history, _ = q_service.get_cat_history(patient_id, page=1, per_page=1)
+        mmrc_history, _ = q_service.get_mmrc_history(patient_id, page=1, per_page=1)
+        
+        latest_cat = cat_history.items[0].total_score if cat_history and cat_history.items else 0
+        latest_mmrc = mmrc_history.items[0].score if mmrc_history and mmrc_history.items else 0
+        
+        # 2. 獲取指定天數的每日記錄
+        daily_metrics, _ = dm_service.get_daily_metrics(
+            patient_id,
+            start_date.isoformat(),
+            end_date.isoformat(),
+            page=1,
+            per_page=days
+        )
+        
+        metrics_list = daily_metrics.items if daily_metrics else []
+        
+        # 3. 計算依從性相關指標
+        total_days = len(metrics_list)
+        medication_taken_count = sum(1 for m in metrics_list if m.medication)
+        adherence_rate = medication_taken_count / max(total_days, 1)
+        
+        # 報告率（實際記錄天數 / 總天數）
+        report_rate = total_days / days
+        
+        # 完成度（基於多個指標的複合分數）
+        completion_score = 0
+        if metrics_list:
+            # 計算各項指標的完整性
+            water_records = sum(1 for m in metrics_list if m.water_cc and m.water_cc > 0)
+            exercise_records = sum(1 for m in metrics_list if m.exercise_min and m.exercise_min > 0)
+            completion_score = (water_records + exercise_records + medication_taken_count) / (3 * max(total_days, 1))
+        
+        # 最後記錄天數
+        last_record_date = max([m.created_at.date() for m in metrics_list]) if metrics_list else None
+        last_report_days = (end_date - last_record_date).days if last_record_date else 999
+        
+        return {
+            "cat_latest": latest_cat,
+            "mmrc_latest": latest_mmrc,
+            "adherence_7d": round(adherence_rate, 3),
+            "report_rate_7d": round(report_rate, 3),
+            "completion_7d": round(completion_score, 3),
+            "last_report_days": last_report_days,
+            "risk_level": calculate_patient_risk(patient_id),
+            "metrics_summary": {
+                "total_records": total_days,
+                "medication_taken_days": medication_taken_count,
+                "avg_water_cc": round(sum(m.water_cc for m in metrics_list if m.water_cc) / max(total_days, 1), 0) if total_days > 0 else 0,
+                "avg_exercise_min": round(sum(m.exercise_min for m in metrics_list if m.exercise_min) / max(total_days, 1), 0) if total_days > 0 else 0,
+                "total_cigarettes": sum(m.cigarettes for m in metrics_list if m.cigarettes) if total_days > 0 else 0
+            }
+        }
+        
+    except Exception as e:
+        import logging
+        logging.error(f"Error calculating patient KPIs for patient {patient_id}: {e}", exc_info=True)
+        # 返回安全的默認值
+        return {
+            "cat_latest": 0,
+            "mmrc_latest": 0,
+            "adherence_7d": 0.0,
+            "report_rate_7d": 0.0,
+            "completion_7d": 0.0,
+            "last_report_days": 999,
+            "risk_level": "low",
+            "metrics_summary": {
+                "total_records": 0,
+                "medication_taken_days": 0,
+                "avg_water_cc": 0,
+                "avg_exercise_min": 0,
+                "total_cigarettes": 0
+            }
+        }
+
 def get_patient_profile(patient_id):
     """
     獲取單一病患的詳細檔案。

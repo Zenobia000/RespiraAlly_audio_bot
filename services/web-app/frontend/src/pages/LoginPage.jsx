@@ -66,9 +66,10 @@ const LoginPage = () => {
         remember: false,
       });
     } else {
+      // Admin 沒有分配病患，改用 therapist_01 作為主要示範帳號
       setFormData({
-        account: "admin",
-        password: "admin",
+        account: "therapist_01",
+        password: "password",
         remember: false,
       });
     }

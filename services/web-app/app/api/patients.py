@@ -196,6 +196,69 @@ def get_patient_profile(patient_id):
 
     return jsonify({"data": response_data}), 200
 
+@patients_bp.route('/patients/<int:patient_id>/kpis', methods=['GET'])
+@jwt_required()
+@swag_from({
+    'summary': '獲取個別病患 KPI 指標',
+    'description': '獲取指定病患的關鍵績效指標，包括最新問卷分數、依從性統計等。',
+    'tags': ['Patients'],
+    'security': [{'bearerAuth': []}],
+    'parameters': [
+        {'name': 'patient_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': '病患的 user_id'},
+        {'name': 'days', 'in': 'query', 'type': 'integer', 'default': 7, 'description': '計算天數範圍（默認7天）'}
+    ],
+    'responses': {
+        '200': {'description': '成功獲取病患 KPI'},
+        '401': {'description': 'Token 無效或未提供'},
+        '403': {'description': '沒有權限查看此病患'},
+        '404': {'description': '找不到該病患'},
+        '500': {'description': '伺服器內部錯誤'}
+    }
+})
+def get_patient_kpis(patient_id):
+    """獲取個別病患的 KPI 指標"""
+    current_user_id = get_jwt_identity()
+    user_repo = UserRepository()
+    current_user = user_repo.find_by_id(current_user_id)
+
+    if not current_user or not current_user.is_staff:
+        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "Staff access required"}}), 403
+
+    # 權限檢查：確保治療師只能查看自己管理的病患
+    patient_profile = patient_service.get_patient_profile(patient_id)
+    if not patient_profile:
+        return jsonify({"error": {"code": "RESOURCE_NOT_FOUND", "message": "Patient not found"}}), 404
+    
+    user, health_profile = patient_profile
+    if health_profile.staff_id != current_user.id:
+        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "You are not authorized to view this patient's KPIs"}}), 403
+
+    # 獲取參數
+    days = request.args.get('days', 7, type=int)
+    
+    try:
+        # 計算 KPI
+        kpi_data = patient_service.calculate_patient_kpis(patient_id, days)
+        
+        return jsonify({
+            "data": kpi_data,
+            "meta": {
+                "patient_id": patient_id,
+                "calculation_days": days,
+                "calculated_at": __import__('datetime').datetime.utcnow().isoformat() + 'Z'
+            }
+        }), 200
+        
+    except Exception as e:
+        import logging
+        logging.error(f"Error calculating patient KPIs for patient {patient_id}: {e}", exc_info=True)
+        return jsonify({
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to calculate patient KPIs"
+            }
+        }), 500
+
 @patients_bp.route('/patients', methods=['GET'])
 @jwt_required()
 def get_patients_generic():

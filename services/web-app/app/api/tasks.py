@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/v1/tasks')
 
 
+# 修復 Flask 尾部斜杠重定向導致的 CORS 問題
+@tasks_bp.route('', methods=['GET'])
 @tasks_bp.route('/', methods=['GET'])
 @jwt_required()
 @swag_from({
@@ -156,6 +158,7 @@ def get_tasks():
         return internal_error_response("Failed to retrieve tasks")
 
 
+@tasks_bp.route('', methods=['POST'])
 @tasks_bp.route('/', methods=['POST'])
 @jwt_required()
 @swag_from({

@@ -9,8 +9,8 @@ export const ENV = import.meta.env.VITE_ENV || "development";
 // 功能旗標
 export const FLAGS = {
   OVERVIEW_READY: true, // 總覽 API 後端已啟動 ✅
-  PATIENT_KPIS_READY: true, // 個案 KPI API 後端已啟動 ✅
-  AI_ALERTS_READY: false, // AI 即時通報未就緒
+  PATIENT_KPIS_READY: true, // 個案 KPI API 後端已實現並啟動 ✅
+  AI_ALERTS_READY: true, // AI 即時通報已就緒 ✅
   ENABLE_TASK_DRAG: true, // 任務 API 已就緒 ✅
   ENABLE_EDU_EDIT: true, // 衛教資源 API 已就緒 ✅
 };
@@ -38,10 +38,13 @@ export const API_ENDPOINTS = {
   OVERVIEW_KPIS: "/overview/kpis",
   OVERVIEW_TRENDS: "/overview/trends",
   OVERVIEW_ADHERENCE: "/overview/adherence",
-  PATIENT_KPIS: (id) => `/patients/${id}/kpis`, // TODO: 未實作 - 個別病患 KPI API
+  PATIENT_KPIS: (id) => `/patients/${id}/kpis`, // ✅ 已實作 - 個別病患 KPI API
 
   // 通報
-  ALERTS_LIVE: "/alerts/live",
+  ALERTS: "/alerts",
+  ALERTS_LIVE: "/alerts", // 統一使用 /alerts
+  ALERT_READ: (id) => `/alerts/${id}/read`,
+  ALERTS_BATCH_READ: "/alerts/batch/read",
 
   // 語音
   VOICE_TRANSCRIBE: "/voice/transcribe",
