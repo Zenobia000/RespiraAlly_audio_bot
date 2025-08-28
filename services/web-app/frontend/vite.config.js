@@ -90,6 +90,12 @@ export default defineConfig(({ command, mode }) => {
       host: "0.0.0.0",
       open: true,
       cors: true,
+      // 強制禁用緩存，確保載入最新代碼
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
       proxy: {
         "/api": {
           target: env.VITE_API_BASE_URL || "http://localhost:5000",

@@ -29,12 +29,37 @@ export const usePatients = (params = {}) => {
         `${API_ENDPOINTS.THERAPIST_PATIENTS}?${queryString}`
       );
 
+      // 確保回應格式正確並包含數據陣列
+      if (!response || typeof response !== 'object') {
+        console.warn('⚠️ API回應格式異常:', response);
+        return [];
+      }
+
+      // 從回應中提取患者陣列，支援多種可能的回應格式
+      let patients = [];
+      if (Array.isArray(response.data)) {
+        patients = response.data;
+      } else if (Array.isArray(response)) {
+        patients = response;
+      } else {
+        console.warn('⚠️ 患者資料不是陣列格式:', response);
+        return [];
+      }
+
       // 確保每個患者都有正確的ID欄位，統一使用user_id
-      const patients = response?.data || [];
-      const processedPatients = patients.map(patient => ({
-        ...patient,
-        id: patient.user_id || patient.id, // 統一使用user_id，避免ID為undefined
-      }));
+      const processedPatients = patients.map(patient => {
+        if (!patient || typeof patient !== 'object') {
+          console.warn('⚠️ 發現無效的患者資料:', patient);
+          return null;
+        }
+        return {
+          ...patient,
+          id: patient.user_id || patient.id, // 統一使用user_id，避免ID為undefined
+          name: patient.first_name && patient.last_name
+            ? `${patient.first_name} ${patient.last_name}`
+            : patient.name || '未知',
+        };
+      }).filter(Boolean); // 過濾掉null值
 
       return processedPatients;
     },
@@ -80,8 +105,9 @@ export const usePatientMetrics = (id, params = {}) => {
         console.log('📊 每日記錄API回應:', response);
         
         // 統一回應格式：{ data: [], pagination: {} }
+        const responseData = Array.isArray(response?.data) ? response.data : [];
         return {
-          data: response?.data || [],
+          data: responseData,
           pagination: response?.pagination || {}
         };
       } catch (error) {
@@ -226,9 +252,16 @@ export const usePatientKpis = (id, params = {}) => {
           apiClient.get(API_ENDPOINTS.PATIENT_DAILY_METRICS(id)),
         ]);
 
-        const catData = apiCalls[0].status === 'fulfilled' ? apiCalls[0].value?.data || [] : [];
-        const mmrcData = apiCalls[1].status === 'fulfilled' ? apiCalls[1].value?.data || [] : [];
-        const metricsData = apiCalls[2].status === 'fulfilled' ? apiCalls[2].value?.data || [] : [];
+        // 安全地提取資料，確保都是陣列
+        const catData = apiCalls[0].status === 'fulfilled'
+          ? Array.isArray(apiCalls[0].value?.data) ? apiCalls[0].value.data : []
+          : [];
+        const mmrcData = apiCalls[1].status === 'fulfilled'
+          ? Array.isArray(apiCalls[1].value?.data) ? apiCalls[1].value.data : []
+          : [];
+        const metricsData = apiCalls[2].status === 'fulfilled'
+          ? Array.isArray(apiCalls[2].value?.data) ? apiCalls[2].value.data : []
+          : [];
 
         const latestCat = catData?.[0]?.total_score || 0;
         const latestMmrc = mmrcData?.[0]?.score || 0;
@@ -439,7 +472,21 @@ export const useAlerts = (params = {}) => {
         );
         
         console.log('🚨 通報API回應:', response);
-        return response || { data: [], pagination: {}, summary: {} };
+        
+        // 確保回應格式正確
+        if (!response || typeof response !== 'object') {
+          console.warn('⚠️ 通報API回應格式異常:', response);
+          return { data: [], pagination: {}, summary: {} };
+        }
+
+        // 確保 data 是陣列
+        const alertData = Array.isArray(response.data) ? response.data : [];
+        
+        return {
+          data: alertData,
+          pagination: response.pagination || {},
+          summary: response.summary || {}
+        };
         
       } catch (error) {
         console.warn('⚠️ 通報API錯誤:', error.message);
