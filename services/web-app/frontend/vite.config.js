@@ -96,7 +96,7 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           // 🔧 修正：對於 ngrok HTTPS，設定 secure: true 並正確處理證書
           secure: env.VITE_API_BASE_URL?.startsWith("https://") ? true : false,
-          rewrite: (path) => path.replace(/^\/api/, "/api/v1"),
+          rewrite: (path) => path,
           configure: (proxy, _options) => {
             proxy.on("error", (err, req, res) => {
               console.error("🚨 Proxy error:", err.message);

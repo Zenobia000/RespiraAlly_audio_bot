@@ -60,3 +60,11 @@ docker-compose.mac.yml
 test_frontend_api_config.html
 .roomodes
 useLIFF.README.md
+CACHE_DEPLOYMENT_GUIDE.md
+.gitignore
+docker-compose.optimized.yml
+deploy-optimized.sh
+.gitignore
+services/web-app/Dockerfile.optimized
+infra/nginx/optimized.conf
+infra/nginx/Dockerfile.optimized

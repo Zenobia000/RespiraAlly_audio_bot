@@ -7,10 +7,12 @@ import { mockTasks } from "../utils/mockTasks";
 export const useTasks = (params = {}) => {
   return useQuery({
     queryKey: ["tasks", params],
-    queryFn: () => {
-      if (ENABLE_MOCK) return Promise.resolve(mockTasks);
+    queryFn: async () => {
+      if (ENABLE_MOCK) return mockTasks;
       const queryString = new URLSearchParams(params).toString();
-      return apiClient.get(`${API_ENDPOINTS.TASKS}?${queryString}`);
+      const response = await apiClient.get(`${API_ENDPOINTS.TASKS}?${queryString}`);
+      // 確保回傳的是陣列資料，而非整個回應物件
+      return response?.data || [];
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -21,7 +23,7 @@ export const useCreateTask = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data) => {
+    mutationFn: async (data) => {
       if (ENABLE_MOCK) {
         const newTask = {
           id: `task_${Date.now()}`,
@@ -30,9 +32,10 @@ export const useCreateTask = () => {
           updated_at: new Date().toISOString(),
         };
         mockTasks.push(newTask);
-        return Promise.resolve(newTask);
+        return newTask;
       }
-      return apiClient.post(API_ENDPOINTS.TASKS, data);
+      const response = await apiClient.post(API_ENDPOINTS.TASKS, data);
+      return response?.data || {};
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -45,16 +48,17 @@ export const useUpdateTask = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, patch }) => {
+    mutationFn: async ({ id, patch }) => {
       if (ENABLE_MOCK) {
         const index = mockTasks.findIndex((t) => t.id === id);
         if (index !== -1) {
           mockTasks[index] = { ...mockTasks[index], ...patch };
-          return Promise.resolve(mockTasks[index]);
+          return mockTasks[index];
         }
-        return Promise.reject(new Error("Task not found"));
+        throw new Error("Task not found");
       }
-      return apiClient.put(API_ENDPOINTS.TASK_DETAIL(id), patch);
+      const response = await apiClient.put(API_ENDPOINTS.TASK_DETAIL(id), patch);
+      return response?.data || {};
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -67,16 +71,17 @@ export const useDeleteTask = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id) => {
+    mutationFn: async (id) => {
       if (ENABLE_MOCK) {
         const index = mockTasks.findIndex((t) => t.id === id);
         if (index !== -1) {
           mockTasks.splice(index, 1);
-          return Promise.resolve();
+          return true;
         }
-        return Promise.reject(new Error("Task not found"));
+        throw new Error("Task not found");
       }
-      return apiClient.delete(API_ENDPOINTS.TASK_DETAIL(id));
+      const response = await apiClient.delete(API_ENDPOINTS.TASK_DETAIL(id));
+      return response?.data || {};
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
