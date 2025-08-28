@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { useAccessibility } from "../../../shared/contexts/AccessibilityContext";
+import bgImageUrl from "@assets/毛玻璃_BG2.png";
 
 // CAT 問卷題目
 const CAT_QUESTIONS = [
@@ -136,7 +137,7 @@ const CAT_QUESTIONS = [
 
 const CATForm = () => {
   const navigate = useNavigate();
-  const { speak, enableVoice } = useTheme();
+  const { speak, enableVoice } = useAccessibility();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -186,10 +187,44 @@ const CATForm = () => {
 
     setIsSubmitting(true);
     try {
-      // TODO: 提交 CAT 問卷到 API
-      // API 端點: POST /api/cat-assessments
-      // 資料格式: { answers: Object, totalScore: number }
-      console.log("提交 CAT 問卷:", { answers, totalScore });
+      // 取得病患 ID（從 LIFF 或 localStorage）
+      const patientId =
+        localStorage.getItem("patientId") ||
+        sessionStorage.getItem("patientId");
+
+      if (!patientId) {
+        throw new Error("找不到病患 ID，請重新登入");
+      }
+
+      // 準備 CAT 問卷資料
+      const catData = {
+        cough_score: answers.cough_score || 0,
+        phlegm_score: answers.phlegm_score || 0,
+        chest_score: answers.chest_score || 0,
+        breathless_score: answers.breathless_score || 0,
+        activities_score: answers.activities_score || 0,
+        confidence_score: answers.confidence_score || 0,
+        sleep_score: answers.sleep_score || 0,
+        energy_score: answers.energy_score || 0,
+        total_score: totalScore,
+      };
+
+      // 提交到 API
+      const response = await fetch(
+        `/api/v1/patients/${patientId}/questionnaires/cat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(catData),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "提交失敗");
+      }
 
       showMessage("success", "問卷已提交成功！");
 
@@ -199,7 +234,7 @@ const CATForm = () => {
       }, 1500);
     } catch (error) {
       console.error("Submit error:", error);
-      showMessage("error", "提交失敗，請重試");
+      showMessage("error", error.message || "提交失敗，請重試");
     } finally {
       setIsSubmitting(false);
     }
@@ -276,7 +311,7 @@ const CATForm = () => {
           left: 0;
           right: 0;
           bottom: 0;
-          background: url("/static/assets/毛玻璃_BG2.png") center/cover;
+          background: url(${bgImageUrl}) center/cover;
           opacity: 0.3;
           z-index: 0;
         }

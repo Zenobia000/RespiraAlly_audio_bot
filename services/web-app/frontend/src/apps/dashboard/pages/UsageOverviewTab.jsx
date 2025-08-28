@@ -16,7 +16,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { useGlobalFilters } from "../layouts/Layout";
+import { useGlobalFilters } from "../contexts/GlobalFiltersContext";
 import LoadingSpinner from "../../../shared/components/LoadingSpinner";
 import dayjs from "dayjs";
 

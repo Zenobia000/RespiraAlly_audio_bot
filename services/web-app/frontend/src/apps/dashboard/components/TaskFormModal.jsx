@@ -19,7 +19,7 @@ const TaskFormModal = ({ task, onSave, onClose }) => {
 
   useEffect(() => {
     if (task) {
-      setFormData({ ...formData, ...task });
+      setFormData(prevData => ({ ...prevData, ...task }));
     }
   }, [task]);
 

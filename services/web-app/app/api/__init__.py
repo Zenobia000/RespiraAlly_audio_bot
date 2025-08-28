@@ -7,6 +7,10 @@ from . import daily_metrics
 from . import users
 from . import uploads
 from . import chat
+from . import overview
+from . import tasks
+from . import education
+from . import voice
 
 __all__ = [
     'auth',
@@ -15,5 +19,9 @@ __all__ = [
     'daily_metrics',
     'users',
     'uploads',
-    'chat'
+    'chat',
+    'overview',
+    'tasks',
+    'education',
+    'voice'
 ]

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { usePatients, useAlerts } from "../../../shared/api/hooks";
 import { RISK_LEVELS } from "../../../shared/config";
@@ -13,8 +13,9 @@ const RightPane = ({ collapsed, onToggle }) => {
     limit: 10,
   });
 
-  // 取得 AI 通報
-  const { data: alerts = [] } = useAlerts();
+  // 取得 AI 通報 - 修復資料格式
+  const { data: alertsResponse } = useAlerts();
+  const alerts = alertsResponse?.data || [];
 
   // 過濾病患
   const filteredPatients = patients.filter((p) =>
@@ -128,7 +129,7 @@ const RightPane = ({ collapsed, onToggle }) => {
                         className={`alert-item ${alert.level}`}
                       >
                         <div className="alert-time">
-                          {new Date(alert.ts).toLocaleTimeString("zh-TW", {
+                          {new Date(alert.created_at || alert.ts).toLocaleTimeString("zh-TW", {
                             hour: "2-digit",
                             minute: "2-digit",
                           })}

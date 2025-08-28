@@ -37,6 +37,87 @@
   --transition-slow: 300ms;
 }
 
+/* 無障礙功能支援 */
+
+/* 高對比度模式 */
+[data-contrast="high"] {
+  --text: #000000;
+  --bg-top: #ffffff;
+  --card: #ffffff;
+  --primary: #0066cc;
+  --success: #008000;
+  --warning: #ff8c00;
+  --danger: #cc0000;
+  --border: rgba(0, 0, 0, 0.3);
+  --shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 6px 12px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+[data-contrast="high"] body {
+  background: #ffffff;
+  color: #000000;
+}
+
+[data-contrast="high"] .card {
+  border: 2px solid #000000;
+}
+
+[data-contrast="high"] .btn {
+  border: 2px solid currentColor;
+  font-weight: 600;
+}
+
+/* 大字體模式 */
+[data-text-size="large"] {
+  font-size: 18px;
+}
+
+[data-text-size="large"] .btn {
+  font-size: 18px;
+  padding: 12px 20px;
+  min-height: 48px;
+}
+
+[data-text-size="large"] .input {
+  font-size: 18px;
+  padding: 12px 16px;
+}
+
+[data-text-size="large"] .kpi-value {
+  font-size: 28px;
+}
+
+[data-text-size="large"] .kpi-label {
+  font-size: 16px;
+}
+
+[data-text-size="large"] h1 {
+  font-size: 2.5rem;
+}
+[data-text-size="large"] h2 {
+  font-size: 2rem;
+}
+[data-text-size="large"] h3 {
+  font-size: 1.75rem;
+}
+[data-text-size="large"] h4 {
+  font-size: 1.5rem;
+}
+[data-text-size="large"] h5 {
+  font-size: 1.25rem;
+}
+[data-text-size="large"] h6 {
+  font-size: 1.125rem;
+}
+
+/* 組合模式：高對比度 + 大字體 */
+[data-contrast="high"][data-text-size="large"] .btn {
+  font-size: 18px;
+  font-weight: 700;
+  border: 3px solid currentColor;
+}
+
 * {
   margin: 0;
   padding: 0;

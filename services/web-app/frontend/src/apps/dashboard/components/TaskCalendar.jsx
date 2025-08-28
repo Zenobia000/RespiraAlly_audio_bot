@@ -3,9 +3,12 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { TASK_TYPES, TASK_STATUS } from "../../../shared/config";
 
-const TaskCalendar = ({ tasks, onTaskClick, onDateClick }) => {
+const TaskCalendar = ({ tasks = [], onTaskClick, onDateClick }) => {
+  // 確保 tasks 是陣列，並提供安全的轉換
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  
   // 轉換任務為日曆事件
-  const events = tasks.map((task) => ({
+  const events = safeTasks.map((task) => ({
     id: task.id,
     title: task.title,
     start: task.start_date || task.due_date,

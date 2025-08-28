@@ -1,19 +1,9 @@
 import { Outlet } from "react-router-dom";
-import { useState, createContext, useContext } from "react";
+import { useState } from "react";
 import SidebarNav from "./SidebarNav";
 import Header from "./Header";
 import RightPane from "./RightPane";
-
-// 建立全域篩選器 Context
-const GlobalFiltersContext = createContext();
-
-export const useGlobalFilters = () => {
-  const context = useContext(GlobalFiltersContext);
-  if (!context) {
-    throw new Error("useGlobalFilters must be used within Layout");
-  }
-  return context;
-};
+import { GlobalFiltersContext } from "../contexts/GlobalFiltersContext";
 
 const Layout = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

@@ -15,7 +15,7 @@ import {
   SoundOutlined,
   BgColorsOutlined,
 } from "@ant-design/icons";
-import { useTheme } from "../contexts/ThemeContext";
+import { useAccessibility } from "../contexts/AccessibilityContext";
 
 const { Title, Text } = Typography;
 
@@ -28,7 +28,7 @@ const AccessibilityPanel = () => {
     toggleHighContrast,
     toggleLargeText,
     toggleVoice,
-  } = useTheme();
+  } = useAccessibility();
 
   return (
     <>

@@ -6,7 +6,7 @@ import quarterOfYear from "dayjs/plugin/quarterOfYear";
 // 啟用季度插件
 dayjs.extend(quarterOfYear);
 
-const Header = ({ onToggleRightPane, onFiltersChange, rightPaneVisible }) => {
+const Header = ({ onToggleRightPane, onFiltersChange }) => {
   const location = useLocation();
   const [quickTimeRange, setQuickTimeRange] = useState("month");
   const [riskFilter, setRiskFilter] = useState("");

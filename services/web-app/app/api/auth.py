@@ -63,6 +63,8 @@ def handle_login():
             "account": user.account,
             "first_name": user.first_name,
             "last_name": user.last_name,
+            "is_staff": user.is_staff,
+            "is_admin": getattr(user, 'is_admin', False),
         }
         if user.is_staff and hasattr(user, 'staff_details') and user.staff_details:
             user_info['title'] = user.staff_details.title

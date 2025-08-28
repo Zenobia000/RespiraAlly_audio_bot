@@ -14,19 +14,16 @@ export const useTheme = () => {
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState("light");
   const [fontSize, setFontSize] = useState("normal");
-  const [enableVoice, setEnableVoice] = useState(false);
 
-  // 載入使用者偏好設定
+  // 載入使用者主題偏好設定
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") || "light";
     const savedFontSize = localStorage.getItem("fontSize") || "normal";
-    const savedVoice = localStorage.getItem("enableVoice") === "true";
 
     setTheme(savedTheme);
     setFontSize(savedFontSize);
-    setEnableVoice(savedVoice);
 
-    // 應用主題
+    // 應用主題設定
     document.documentElement.setAttribute("data-theme", savedTheme);
     document.documentElement.setAttribute("data-font-size", savedFontSize);
   }, []);
@@ -44,34 +41,11 @@ export const ThemeProvider = ({ children }) => {
     document.documentElement.setAttribute("data-font-size", size);
   };
 
-  const toggleVoice = () => {
-    const newValue = !enableVoice;
-    setEnableVoice(newValue);
-    localStorage.setItem("enableVoice", String(newValue));
-  };
-
-  // 語音合成功能
-  const speak = (text) => {
-    if (!enableVoice || !window.speechSynthesis) return;
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "zh-TW";
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  };
-
   const value = {
     theme,
     fontSize,
-    enableVoice,
     toggleTheme,
     changeFontSize,
-    toggleVoice,
-    speak,
   };
 
   return (

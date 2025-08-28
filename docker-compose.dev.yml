@@ -152,12 +152,18 @@ services:
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - RABBITMQ_QUEUE=task_queue
       - PYTHONUNBUFFERED=1
+      - MILVUS_URI=http://milvus:19530
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       mongodb:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   # -------------------------------------------------
