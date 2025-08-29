@@ -18,14 +18,6 @@ services:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "15432:5432"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 512M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
     restart: unless-stopped
     healthcheck:
       test:
@@ -54,8 +46,6 @@ services:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    ports:
-      - "15672:15672" # 只暴露管理介面給內網或特定IP
     restart: unless-stopped
 
   etcd:
@@ -101,6 +91,7 @@ services:
       - milvusdata:/milvus/data
     restart: unless-stopped
 
+
   mongodb:
     image: mongo:latest
     container_name: prod_mongodb
@@ -130,7 +121,8 @@ services:
         - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: prod_web_app_service
-    command: gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:5000 wsgi:app
+    command: >
+      sh -lc "flask db upgrade && gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:5000 wsgi:app
     env_file:
       - .env
     environment:
@@ -141,6 +133,8 @@ services:
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - RABBITMQ_QUEUE=task_queue
       - PYTHONUNBUFFERED=1
+      - MILVUS_URI=http://milvus:19530
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,13 +168,14 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_QUEUE=task_queue
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
-      - RABBITMQ_LLM_QUEUE=llm_request_queue
-      - RABBITMQ_STT_QUEUE=stt_request_queue
-      - RABBITMQ_TTS_QUEUE=tts_request_queue
-      - PYTHONUNBUFFERED=1
       - MINIO_BUCKET_NAME=audio-bucket
       - VOICE_BUCKET=audio-uploads
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MILVUS_URI=http://milvus:19530
+      # 禁用 CrewAI 遙測功能
+      - OTEL_SDK_DISABLED=true
+      - CREWAI_TELEMETRY_OPT_OUT=true
+
       # HF 模型快取位置（與上方卷一致）
       - HF_HOME=/root/.cache/huggingface
       - TRANSFORMERS_CACHE=/root/.cache/huggingface
