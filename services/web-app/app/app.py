@@ -14,8 +14,11 @@ from .api.voice import bp as voice_bp  # Import voice API blueprint
 from .api.education import education_bp  # Import education API blueprint
 from .api.overview import overview_bp  # Import overview API blueprint
 from .api.tasks import tasks_bp  # Import tasks API blueprint
-from .api.debug_test import debug_bp  # Import debug test blueprint
 from .api.alerts import alerts_bp  # Import alerts API blueprint
+
+# 🔒 Debug端點僅在開發環境導入
+if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'True':
+    from .api.debug_test import debug_bp  # Import debug test blueprint only in dev
 from .core.notification_service import start_notification_listener
 from .middleware.error_handler import register_error_handlers
 from .middleware.monitoring import init_monitoring
@@ -67,8 +70,12 @@ def create_app(config_name="default"):
     app.register_blueprint(education_bp)  # Register the education API blueprint
     app.register_blueprint(overview_bp)  # Register the overview API blueprint
     app.register_blueprint(tasks_bp)  # Register the tasks API blueprint
-    app.register_blueprint(debug_bp)  # Register the debug test blueprint
     app.register_blueprint(alerts_bp)  # Register the alerts API blueprint
+    
+    # 🔒 Debug端點僅在開發環境註冊
+    if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'True' or app.debug:
+        app.register_blueprint(debug_bp)  # Register debug endpoints only in dev
+        print(f"🐛 Debug endpoints registered at /api/v1/debug/*")
 
     # 4. 註冊統一的錯誤處理器和效能監控
     register_error_handlers(app)

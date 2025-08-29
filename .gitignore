@@ -19,7 +19,6 @@ doucment/
 voice_chat.md
 .cursorrules
 web_dashboard/
-debug_test.py
 
 # Logs
 logs
@@ -53,7 +52,6 @@ dist-ssr
 design_templates
 seed_csv_output/
 web_dashboard/
-.cursorrules
 test_education_api.py
 EDUCATION_API_README.md
 docker-compose.mac.yml
@@ -61,10 +59,8 @@ test_frontend_api_config.html
 .roomodes
 useLIFF.README.md
 CACHE_DEPLOYMENT_GUIDE.md
-.gitignore
 docker-compose.optimized.yml
 deploy-optimized.sh
-.gitignore
 services/web-app/Dockerfile.optimized
 infra/nginx/optimized.conf
 infra/nginx/Dockerfile.optimized

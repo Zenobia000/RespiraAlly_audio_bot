@@ -163,8 +163,6 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
 
   # -------------------------------------------------
   #  3. AI 服務層 (Production Mode)
