@@ -80,7 +80,7 @@ def create_app(config_name="default"):
     # 4. 註冊統一的錯誤處理器和效能監控
     register_error_handlers(app)
     init_monitoring(app)
-    
+
     # 5. 添加 CORS 支援 (開發環境)
     @app.after_request
     def after_request_cors(response):
@@ -88,7 +88,7 @@ def create_app(config_name="default"):
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Request-Id')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
         return response
-    
+
     @app.before_request
     def handle_preflight():
         from flask import request, make_response
@@ -104,13 +104,13 @@ def create_app(config_name="default"):
     def serve_react_static(filename):
         from flask import send_from_directory
         return send_from_directory(app.static_folder, filename)
-    
+
     # 根路由，重導向到 React 應用程式
     @app.route("/")
     def index():
         from flask import send_from_directory
         return send_from_directory(app.static_folder, 'index.html')
-    
+
     # SPA 路由支援 - 捕獲所有非 API 路由，重導向到 React 應用程式
     @app.route('/<path:path>')
     def catch_all(path):
@@ -118,7 +118,7 @@ def create_app(config_name="default"):
         if path.startswith('api/') or path.startswith('static/') or path.startswith('swagger/'):
             from flask import abort
             abort(404)
-        
+
         # 檢查是否為靜態檔案（JS, CSS, 圖片等）
         if '.' in path.split('/')[-1]:
             try:
@@ -127,7 +127,7 @@ def create_app(config_name="default"):
             except:
                 from flask import abort
                 abort(404)
-        
+
         # 所有其他路由都返回 React 應用程式
         from flask import send_from_directory
         return send_from_directory(app.static_folder, 'index.html')
