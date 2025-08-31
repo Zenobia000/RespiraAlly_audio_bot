@@ -82,13 +82,16 @@ const HealthOverviewTab = () => {
     ...(globalFilters.riskFilter && { risk: globalFilters.riskFilter }),
   });
 
-  // 篩選高風險病患和低依從性病患
-  const highRiskPatients = (Array.isArray(allPatients) ? allPatients : [])
-    .filter((p) => p.cat_score >= 20 || p.mmrc_score >= 2)
+  // 確保資料是陣列格式，然後篩選高風險病患和低依從性病患
+  const safeAllPatients = Array.isArray(allPatients) ? allPatients : [];
+  const safeMetricsData = Array.isArray(metricsData) ? metricsData : [];
+  
+  const highRiskPatients = safeAllPatients
+    .filter((p) => p && (p.cat_score >= 20 || p.mmrc_score >= 2))
     .slice(0, 8);
 
-  const lowAdherencePatients = (Array.isArray(allPatients) ? allPatients : [])
-    .filter((p) => (p.adherence_rate || 0) <= 0.6)
+  const lowAdherencePatients = safeAllPatients
+    .filter((p) => p && (p.adherence_rate || 0) <= 0.6)
     .slice(0, 8);
 
   if (
@@ -126,7 +129,7 @@ const HealthOverviewTab = () => {
           </div>
         </div>
         <BehaviorOverviewTrends
-          data={metricsData}
+          data={safeMetricsData}
           range={localTimeRange.range}
         />
       </section>

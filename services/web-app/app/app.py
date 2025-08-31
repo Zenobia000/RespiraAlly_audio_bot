@@ -72,10 +72,13 @@ def create_app(config_name="default"):
     app.register_blueprint(tasks_bp)  # Register the tasks API blueprint
     app.register_blueprint(alerts_bp)  # Register the alerts API blueprint
     
-    # 🔒 Debug端點僅在開發環境註冊
-    if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'True' or app.debug:
-        app.register_blueprint(debug_bp)  # Register debug endpoints only in dev
-        print(f"🐛 Debug endpoints registered at /api/v1/debug/*")
+    # # 🔒 Debug端點僅在開發環境註冊
+    # if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'True' or app.debug:
+    #     try:
+    #         app.register_blueprint(debug_bp)  # Register debug endpoints only in dev
+    #     except NameError:
+    #         print(f"⚠️  Debug blueprint not imported, skipping debug endpoints registration")
+    #     print(f"🐛 Debug endpoints registered at /api/v1/debug/*")
 
     # 4. 註冊統一的錯誤處理器和效能監控
     register_error_handlers(app)

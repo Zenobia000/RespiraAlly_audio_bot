@@ -42,11 +42,14 @@ const PatientDetail = () => {
     return <LoadingSpinner fullScreen message="載入病患資料..." />;
   }
 
-  // 準備圖表資料
-  const trendData = catHistory.map((cat, index) => ({
+  // 準備圖表資料 - 確保資料是陣列
+  const safeCatHistory = Array.isArray(catHistory) ? catHistory : [];
+  const safeMmrcHistory = Array.isArray(mmrcHistory) ? mmrcHistory : [];
+  
+  const trendData = safeCatHistory.map((cat, index) => ({
     date: cat.date,
     cat_avg: cat.score,
-    mmrc_avg: mmrcHistory[index]?.score || 0,
+    mmrc_avg: safeMmrcHistory[index]?.score || 0,
   }));
 
   return (

@@ -126,13 +126,27 @@ export const useCatHistory = (id, params = {}) => {
   return useQuery({
     queryKey: ["cat", id, params],
     queryFn: async () => {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await apiClient.get(
-        `${API_ENDPOINTS.PATIENT_CAT(id)}?${queryString}`
-      );
-      return response?.data || [];
+      try {
+        const queryString = new URLSearchParams(params).toString();
+        const response = await apiClient.get(
+          `${API_ENDPOINTS.PATIENT_CAT(id)}?${queryString}`
+        );
+        
+        // 確保返回的是陣列
+        const data = response?.data;
+        if (Array.isArray(data)) {
+          return data;
+        } else {
+          console.warn('⚠️ CAT API 回應不是陣列格式:', response);
+          return [];
+        }
+      } catch (error) {
+        console.warn('⚠️ CAT API 錯誤:', error.message);
+        return [];
+      }
     },
     enabled: !!id,
+    retry: 1,
   });
 };
 
@@ -141,13 +155,27 @@ export const useMmrcHistory = (id, params = {}) => {
   return useQuery({
     queryKey: ["mmrc", id, params],
     queryFn: async () => {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await apiClient.get(
-        `${API_ENDPOINTS.PATIENT_MMRC(id)}?${queryString}`
-      );
-      return response?.data || [];
+      try {
+        const queryString = new URLSearchParams(params).toString();
+        const response = await apiClient.get(
+          `${API_ENDPOINTS.PATIENT_MMRC(id)}?${queryString}`
+        );
+        
+        // 確保返回的是陣列
+        const data = response?.data;
+        if (Array.isArray(data)) {
+          return data;
+        } else {
+          console.warn('⚠️ MMRC API 回應不是陣列格式:', response);
+          return [];
+        }
+      } catch (error) {
+        console.warn('⚠️ MMRC API 錯誤:', error.message);
+        return [];
+      }
     },
     enabled: !!id,
+    retry: 1,
   });
 };
 

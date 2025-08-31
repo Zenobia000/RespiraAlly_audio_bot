@@ -56,7 +56,19 @@ def handle_login():
 
         identity = str(user.id)
         expires = timedelta(hours=1)
-        access_token = create_access_token(identity=identity, expires_delta=expires)
+        
+        # 添加 roles 到 JWT payload
+        additional_claims = {
+            'roles': ['staff'] if user.is_staff else ['patient']
+        }
+        if user.is_admin:
+            additional_claims['roles'].append('admin')
+            
+        access_token = create_access_token(
+            identity=identity,
+            expires_delta=expires,
+            additional_claims=additional_claims
+        )
 
         user_info = {
             "id": user.id,
@@ -122,7 +134,19 @@ def handle_line_login():
 
     identity = str(user.id)
     expires = timedelta(days=7)
-    access_token = create_access_token(identity=identity, expires_delta=expires)
+    
+    # 添加 roles 到 JWT payload
+    additional_claims = {
+        'roles': ['staff'] if user.is_staff else ['patient']
+    }
+    if user.is_admin:
+        additional_claims['roles'].append('admin')
+        
+    access_token = create_access_token(
+        identity=identity,
+        expires_delta=expires,
+        additional_claims=additional_claims
+    )
 
     user_info = {
         "id": user.id,
