@@ -32,9 +32,7 @@ def create_app(config_name="default"):
     """
     應用程式工廠函數。
     """
-    # 設定靜態檔案目錄為包含 React 建置檔案的 frontend/dist 目錄
-    static_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist')
-    app = Flask(__name__, static_folder=static_folder)
+    app = Flask(__name__)
 
     # 1. 載入設定
     app.config.from_object(config[config_name])
