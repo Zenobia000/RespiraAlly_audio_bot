@@ -155,6 +155,8 @@ services:
       - MILVUS_URI=http://milvus:19530
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
+      rabbitmq:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -163,6 +165,14 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: dev_frontend_service
+    ports:
+      - "3000:3000"
 
   # -------------------------------------------------
   #  3. AI 服務層 (Production Mode)

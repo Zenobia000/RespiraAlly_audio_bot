@@ -43,26 +43,26 @@ logger = logging.getLogger(__name__)
 
 def init_monitoring(app):
     """初始化 API 效能監控"""
-    
+
     @app.before_request
     def before_request():
         """請求開始時記錄時間戳"""
         g.start_time = time.time()
         g.request_id = request.headers.get('X-Request-Id', f'req_{int(time.time() * 1000)}')
-    
+
     @app.after_request
     def after_request(response):
         """請求結束後記錄效能指標"""
         if hasattr(g, 'start_time'):
             duration = time.time() - g.start_time
-            
+
             # 添加效能標頭
             response.headers['X-Request-Id'] = getattr(g, 'request_id', '')
             response.headers['X-Response-Time'] = f'{duration:.3f}s'
-            
+
             # 記錄效能日誌
             log_api_metrics(request, response, duration)
-            
+
         return response
 
 def log_api_metrics(request, response, duration):
@@ -70,15 +70,15 @@ def log_api_metrics(request, response, duration):
     # 只記錄 API 路由
     if not request.path.startswith('/api/'):
         return
-    
+
     status_code = response.status_code
     method = request.method
     path = request.path
-    
+
     # 效能日誌
     log_level = logging.WARNING if duration > 1.0 else logging.INFO
     logger.log(log_level, f"API_METRICS: {method} {path} {status_code} {duration:.3f}s")
-    
+
     # 慢查詢警告
     if duration > 2.0:
         logger.warning(f"SLOW_API: {method} {path} took {duration:.3f}s (>2s threshold)")
@@ -92,10 +92,10 @@ def performance_monitor(threshold_seconds=1.0):
             try:
                 result = f(*args, **kwargs)
                 duration = time.time() - start_time
-                
+
                 if duration > threshold_seconds:
                     logger.warning(f"PERFORMANCE: {f.__name__} took {duration:.3f}s")
-                
+
                 return result
             except Exception as e:
                 duration = time.time() - start_time

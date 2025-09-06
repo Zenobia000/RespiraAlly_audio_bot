@@ -16,12 +16,12 @@ def success_response(
 ) -> tuple:
     """
     建立成功回應
-    
+
     Args:
         data: 回應資料
         message: 成功訊息
         meta: 額外的元資料
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -29,17 +29,17 @@ def success_response(
         "success": True,
         "data": data
     }
-    
+
     if message:
         response["message"] = message
-    
+
     if meta is None:
         meta = {}
-    
+
     meta["timestamp"] = datetime.utcnow().isoformat() + "Z"
     meta["version"] = "1.0"
     response["meta"] = meta
-    
+
     return jsonify(response), 200
 
 
@@ -50,12 +50,12 @@ def created_response(
 ) -> tuple:
     """
     建立資源建立成功回應 (201)
-    
+
     Args:
         data: 建立的資源資料
         message: 成功訊息
         meta: 額外的元資料
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -64,14 +64,14 @@ def created_response(
         "data": data,
         "message": message
     }
-    
+
     if meta is None:
         meta = {}
-    
+
     meta["timestamp"] = datetime.utcnow().isoformat() + "Z"
     meta["version"] = "1.0"
     response["meta"] = meta
-    
+
     return jsonify(response), 201
 
 
@@ -84,14 +84,14 @@ def error_response(
 ) -> tuple:
     """
     建立錯誤回應
-    
+
     Args:
         code: 錯誤代碼（如 'VALIDATION_ERROR', 'NOT_FOUND'）
         message: 人類可讀的錯誤訊息
         status_code: HTTP 狀態碼
         details: 額外的錯誤詳情
         request_id: 請求 ID（用於追蹤）
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -106,10 +106,10 @@ def error_response(
             "request_id": request_id or str(uuid.uuid4())
         }
     }
-    
+
     if details:
         response["error"]["details"] = details
-    
+
     return jsonify(response), status_code
 
 
@@ -119,11 +119,11 @@ def validation_error_response(
 ) -> tuple:
     """
     建立驗證錯誤回應
-    
+
     Args:
         errors: 驗證錯誤詳情
         message: 錯誤訊息
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -141,18 +141,18 @@ def not_found_response(
 ) -> tuple:
     """
     建立資源未找到回應
-    
+
     Args:
         resource: 資源類型名稱
         identifier: 資源識別符
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
     message = f"{resource} not found"
     if identifier:
         message = f"{resource} with ID '{identifier}' not found"
-    
+
     return error_response(
         code="NOT_FOUND",
         message=message,
@@ -165,10 +165,10 @@ def unauthorized_response(
 ) -> tuple:
     """
     建立未授權回應
-    
+
     Args:
         message: 錯誤訊息
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -184,10 +184,10 @@ def forbidden_response(
 ) -> tuple:
     """
     建立禁止訪問回應
-    
+
     Args:
         message: 錯誤訊息
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -204,11 +204,11 @@ def internal_error_response(
 ) -> tuple:
     """
     建立內部錯誤回應
-    
+
     Args:
         message: 錯誤訊息
         request_id: 請求 ID
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -230,7 +230,7 @@ def paginated_response(
 ) -> tuple:
     """
     建立分頁回應
-    
+
     Args:
         data: 當前頁資料
         page: 當前頁碼
@@ -238,12 +238,12 @@ def paginated_response(
         total: 總數量
         message: 成功訊息
         meta: 額外的元資料
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
     total_pages = (total + per_page - 1) // per_page
-    
+
     response = {
         "success": True,
         "data": data,
@@ -256,24 +256,24 @@ def paginated_response(
             "has_prev": page > 1
         }
     }
-    
+
     if message:
         response["message"] = message
-    
+
     if meta is None:
         meta = {}
-    
+
     meta["timestamp"] = datetime.utcnow().isoformat() + "Z"
     meta["version"] = "1.0"
     response["meta"] = meta
-    
+
     return jsonify(response), 200
 
 
 def no_content_response() -> tuple:
     """
     建立無內容回應 (204)
-    
+
     Returns:
         空回應和狀態碼
     """
@@ -287,11 +287,11 @@ def accepted_response(
     """
     建立請求已接受回應 (202)
     用於異步處理
-    
+
     Args:
         message: 訊息
         task_id: 任務 ID（用於追蹤異步任務）
-        
+
     Returns:
         Flask jsonify 回應和狀態碼
     """
@@ -299,13 +299,13 @@ def accepted_response(
         "success": True,
         "message": message
     }
-    
+
     if task_id:
         response["task_id"] = task_id
-    
+
     response["meta"] = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "version": "1.0"
     }
-    
+
     return jsonify(response), 202
