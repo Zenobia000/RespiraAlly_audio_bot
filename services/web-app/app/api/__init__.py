@@ -6,7 +6,6 @@ from . import questionnaires
 from . import daily_metrics
 from . import users
 from . import uploads
-from . import chat
 from . import overview
 from . import tasks
 from . import education
@@ -19,7 +18,6 @@ __all__ = [
     'daily_metrics',
     'users',
     'uploads',
-    'chat',
     'overview',
     'tasks',
     'education',

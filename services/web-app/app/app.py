@@ -15,8 +15,6 @@ from .api.overview import overview_bp  # Import overview API blueprint
 from .api.tasks import tasks_bp  # Import tasks API blueprint
 from .api.alerts import alerts_bp  # Import alerts API blueprint
 from .core.notification_service import start_notification_listener
-from .middleware.error_handler import register_error_handlers
-from .middleware.monitoring import init_monitoring
 
 # 從原本示範任務，改為引入實際排程任務（保留原檔案中的示範函式，不再註冊）
 from .core.scheduler_service import scheduled_task
@@ -62,9 +60,6 @@ def create_app(config_name="default"):
     app.register_blueprint(tasks_bp)  # Register the tasks API blueprint
     app.register_blueprint(alerts_bp)  # Register the alerts API blueprint
 
-    # 4. 註冊統一的錯誤處理器和效能監控
-    register_error_handlers(app)
-    init_monitoring(app)
 
     # 5. 添加 CORS 支援 (開發環境)
     @app.after_request
