@@ -102,7 +102,6 @@ services:
         - LIFF_CHANNEL_ID=${LIFF_CHANNEL_ID}
         - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
         - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: prod_web_app_service
     command: >
       sh -lc "flask db upgrade && gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:5000 wsgi:app

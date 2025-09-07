@@ -9,7 +9,7 @@ WORKDIR /app
 COPY . .
 
 # 安裝所有依賴（包括 devDependencies，因為 vite 是開發依賴）
-RUN npm ci
+RUN npm install
 
 # 設定建置時的環境變數（使用 ARG 傳入）
 ARG LIFF_CHANNEL_ID
