@@ -122,7 +122,7 @@ export default defineConfig(({ command, mode }) => {
       // API 代理設定，解決開發時的跨域問題
       proxy: {
         "/api": {
-          target: "http://localhost:5000", // 強制指向 Flask 後端服務
+          target: "http://web-app:5000", // 強制指向 Flask 後端服務
           changeOrigin: true, // 改變請求來源，使其看起來像是來自目標伺服器
           secure: false, // 後端 API 是 http，所以 secure 設定為 false
           rewrite: (path) => path, // 不重寫路徑
