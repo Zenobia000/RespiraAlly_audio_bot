@@ -91,23 +91,6 @@ services:
       - milvusdata:/milvus/data
     restart: unless-stopped
 
-
-  mongodb:
-    image: mongo:latest
-    container_name: prod_mongodb
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-    volumes:
-      - mongodb_data:/data/db
-    restart: unless-stopped
-    healthcheck:
-      test: |
-        mongosh --host localhost:27017 --eval "db.adminCommand('ping')" --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # -------------------------------------------------
   #  2. 應用程式層 (Production Mode)
   # -------------------------------------------------
@@ -128,7 +111,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - RABBITMQ_QUEUE=task_queue
@@ -139,8 +121,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      mongodb:
         condition: service_healthy
     restart: on-failure
 
@@ -160,7 +140,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
@@ -195,7 +174,6 @@ services:
       - rabbitmq
       - postgres
       - redis
-      - mongodb
       - minio
     restart: on-failure
 
@@ -228,6 +206,5 @@ volumes:
   milvusdata:
   minio:
   etcd:
-  mongodb_data:
   rabbitmq_data:
   hf_cache:

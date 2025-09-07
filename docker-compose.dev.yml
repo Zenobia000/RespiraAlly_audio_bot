@@ -104,23 +104,6 @@ services:
       timeout: 5s
       retries: 12
 
-  mongodb:
-    image: mongo:latest
-    container_name: dev_mongodb
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-    ports:
-      - "27017:27017"
-    volumes:
-      - dev_mongodb_data:/data/db
-    restart: unless-stopped
-    healthcheck:
-      test: |
-        mongosh --host localhost:27017 --eval "db.adminCommand('ping')" --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # -------------------------------------------------
   #  2. 應用程式層 (開發模式)
@@ -147,7 +130,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - RABBITMQ_QUEUE=task_queue
@@ -160,8 +142,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      mongodb:
         condition: service_healthy
       milvus:
         condition: service_healthy
@@ -192,7 +172,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
@@ -229,8 +208,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      mongodb:
         condition: service_healthy
       minio:
         condition: service_started
@@ -270,6 +247,5 @@ volumes:
   dev_milvusdata:
   dev_minio:
   dev_etcd:
-  dev_mongodb_data:
   dev_rabbitmq_data:
   dev_hf_cache:

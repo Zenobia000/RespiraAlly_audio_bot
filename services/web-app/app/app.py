@@ -2,14 +2,13 @@
 import os
 from flask import Flask, jsonify
 from .config import config
-from .extensions import db, migrate, swagger, jwt, socketio, init_mongo, scheduler
+from .extensions import db, migrate, swagger, jwt, socketio, scheduler
 from .api.auth import auth_bp
 from .api.patients import patients_bp
 from .api.questionnaires import questionnaires_bp
 from .api.uploads import uploads_bp
 from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
-from .api.chat import bp as chat_bp  # Explicitly import and alias the blueprint
 from .api.voice import bp as voice_bp  # Import voice API blueprint
 from .api.education import education_bp  # Import education API blueprint
 from .api.overview import overview_bp  # Import overview API blueprint
@@ -49,8 +48,6 @@ def create_app(config_name="default"):
         scheduler.init_app(app)
         scheduler.start()
 
-    init_mongo()
-
     socketio.init_app(app, async_mode="gevent", cors_allowed_origins="*")
 
     app.register_blueprint(users_bp)
@@ -59,7 +56,6 @@ def create_app(config_name="default"):
     app.register_blueprint(questionnaires_bp)
     app.register_blueprint(daily_metrics_bp)
     app.register_blueprint(uploads_bp)
-    app.register_blueprint(chat_bp)  # Register the aliased blueprint
     app.register_blueprint(voice_bp)  # Register the voice API blueprint
     app.register_blueprint(education_bp)  # Register the education API blueprint
     app.register_blueprint(overview_bp)  # Register the overview API blueprint
