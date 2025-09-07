@@ -9,7 +9,6 @@ minio
 
 # --- Messaging & Databases ---
 pika
-pymongo==4.8.0
 pymilvus
 redis
 

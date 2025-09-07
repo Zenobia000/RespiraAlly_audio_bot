@@ -2,14 +2,13 @@
 import os
 from flask import Flask, jsonify
 from .config import config
-from .extensions import db, migrate, swagger, jwt, socketio, init_mongo, scheduler
+from .extensions import db, migrate, swagger, jwt, socketio, scheduler
 from .api.auth import auth_bp
 from .api.patients import patients_bp
 from .api.questionnaires import questionnaires_bp
 from .api.uploads import uploads_bp
 from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
-from .api.chat import bp as chat_bp  # Explicitly import and alias the blueprint
 from .api.voice import bp as voice_bp  # Import voice API blueprint
 from .api.education import education_bp  # Import education API blueprint
 from .api.overview import overview_bp  # Import overview API blueprint
@@ -20,8 +19,6 @@ from .api.alerts import alerts_bp  # Import alerts API blueprint
 if os.getenv('FLASK_ENV') == 'development' or os.getenv('DEBUG') == 'True':
     from .api.debug_test import debug_bp  # Import debug test blueprint only in dev
 from .core.notification_service import start_notification_listener
-from .middleware.error_handler import register_error_handlers
-from .middleware.monitoring import init_monitoring
 
 # 從原本示範任務，改為引入實際排程任務（保留原檔案中的示範函式，不再註冊）
 from .core.scheduler_service import scheduled_task
@@ -36,9 +33,7 @@ def create_app(config_name="default"):
     """
     應用程式工廠函數。
     """
-    # 設定靜態檔案目錄為包含 React 建置檔案的 frontend/dist 目錄
-    static_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist')
-    app = Flask(__name__, static_folder=static_folder)
+    app = Flask(__name__)
 
     # 1. 載入設定
     app.config.from_object(config[config_name])
@@ -55,8 +50,6 @@ def create_app(config_name="default"):
         scheduler.init_app(app)
         scheduler.start()
 
-    init_mongo()
-
     socketio.init_app(app, async_mode="gevent", cors_allowed_origins="*")
 
     app.register_blueprint(users_bp)
@@ -65,7 +58,6 @@ def create_app(config_name="default"):
     app.register_blueprint(questionnaires_bp)
     app.register_blueprint(daily_metrics_bp)
     app.register_blueprint(uploads_bp)
-    app.register_blueprint(chat_bp)  # Register the aliased blueprint
     app.register_blueprint(voice_bp)  # Register the voice API blueprint
     app.register_blueprint(education_bp)  # Register the education API blueprint
     app.register_blueprint(overview_bp)  # Register the overview API blueprint
@@ -80,9 +72,6 @@ def create_app(config_name="default"):
     #         print(f"⚠️  Debug blueprint not imported, skipping debug endpoints registration")
     #     print(f"🐛 Debug endpoints registered at /api/v1/debug/*")
 
-    # 4. 註冊統一的錯誤處理器和效能監控
-    register_error_handlers(app)
-    init_monitoring(app)
 
     # 5. 添加 CORS 支援 (開發環境)
     @app.after_request

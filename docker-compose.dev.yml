@@ -44,8 +44,8 @@ services:
     image: rabbitmq:3.12-management-alpine
     container_name: dev_rabbitmq_queue
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     volumes:
       - dev_rabbitmq_data:/var/lib/rabbitmq
     ports:
@@ -69,8 +69,8 @@ services:
     container_name: dev_milvus-minio
     image: quay.io/minio/minio:RELEASE.2025-05-24T17-08-30Z
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     ports:
       - "9001:9001"
       - "9000:9000"
@@ -104,23 +104,6 @@ services:
       timeout: 5s
       retries: 12
 
-  mongodb:
-    image: mongo:latest
-    container_name: dev_mongodb
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-    ports:
-      - "27017:27017"
-    volumes:
-      - dev_mongodb_data:/data/db
-    restart: unless-stopped
-    healthcheck:
-      test: |
-        mongosh --host localhost:27017 --eval "db.adminCommand('ping')" --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # -------------------------------------------------
   #  2. 應用程式層 (開發模式)
@@ -133,7 +116,6 @@ services:
         - LIFF_CHANNEL_ID=${LIFF_CHANNEL_ID}
         - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
         - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: dev_web_app_service
     entrypoint: >
       sh -lc "flask db upgrade heads && flask run --host=0.0.0.0 --port=5000 --debug"
@@ -147,22 +129,38 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - RABBITMQ_QUEUE=task_queue
       - PYTHONUNBUFFERED=1
       - MILVUS_URI=http://milvus:19530
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
+      rabbitmq:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
       milvus:
         condition: service_healthy
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: dev_frontend_service
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      # 掛載本地程式碼以啟用熱重載
+      - ./services/frontend:/app
+      # 避免 node_modules 被本地覆蓋，使用匿名 volume
+      - /app/node_modules
+    depends_on:
+      - web-app
 
   # -------------------------------------------------
   #  3. AI 服務層 (Production Mode)
@@ -182,8 +180,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
@@ -219,8 +216,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      mongodb:
         condition: service_healthy
       minio:
         condition: service_started
@@ -260,6 +255,5 @@ volumes:
   dev_milvusdata:
   dev_minio:
   dev_etcd:
-  dev_mongodb_data:
   dev_rabbitmq_data:
   dev_hf_cache:
