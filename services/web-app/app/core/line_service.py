@@ -2,7 +2,6 @@
 import os
 from flask import current_app
 from linebot.v3 import WebhookHandler
-from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
     Configuration,
     ApiClient,
@@ -56,11 +55,6 @@ class LineService:
         # 註冊所有事件的處理函式
         self._register_handlers()
 
-    # ... (handle_webhook, _get_or_create_conversation, _register_handlers,
-    #      handle_text_message, handle_audio_message, handle_follow, handle_unfollow,
-    #      link_rich_menu_to_user, _reply_text, _reply_with_registration_prompt
-    #      等函式維持不變) ...
-
     def handle_webhook(self, body: str, signature: str):
         """
         處理從 LINE 平台傳來的 Webhook 請求。
@@ -70,35 +64,6 @@ class LineService:
         # 使用 handler 處理請求，它會自動驗證簽名並呼叫對應的事件處理函式
         self.handler.handle(body, signature)
 
-    def _get_or_create_conversation(self, patient_id: int) -> str:
-        """
-        尋找指定病患最近的活躍對話，如果沒有或已過期，則創建一個新的對話。
-        一個對話如果在過去 24 小時內開始，則被視為「活躍」。
-        :param patient_id: 病患的內部資料庫 ID
-        :return: 對話的 ID (字串格式)
-        """
-        # 延遲導入，避免循環依賴問題
-        from .chat_repository import ChatRepository
-        from datetime import datetime, timezone, timedelta
-
-        chat_repo = ChatRepository()
-        # 從資料庫中根據病患ID獲取最近的對話紀錄
-        recent_conversations = chat_repo.get_conversations_by_patient_id(patient_id=patient_id)
-
-        if recent_conversations:
-            latest_convo = recent_conversations[0]
-            # 確保從資料庫取出的時間是帶有時區資訊的 (UTC)
-            start_time_aware = latest_convo['start_time'].replace(tzinfo=timezone.utc)
-
-            # 檢查最新的對話是否仍在 24 小時內
-            if datetime.now(timezone.utc) - start_time_aware < timedelta(hours=24):
-                # 如果是，回傳該對話的 ID
-                return str(latest_convo['_id'])
-
-        # 如果找不到活躍的對話，就創建一個新的
-        new_conversation_id = chat_repo.create_conversation(patient_id=patient_id)
-        return str(new_conversation_id)
-
     def _register_handlers(self):
         """註冊 WebhookHandler 的所有事件處理函式。"""
 
@@ -106,7 +71,6 @@ class LineService:
         @self.handler.add(MessageEvent, message=TextMessageContent)
         def handle_text_message(event: MessageEvent):
             from .user_repository import UserRepository
-            from .chat_repository import ChatRepository
             from .rabbitmq_service import get_rabbitmq_service
 
             user_repo = UserRepository()
@@ -119,17 +83,6 @@ class LineService:
                 return
 
             try:
-                # 獲取或創建一個對話
-                conversation_id = self._get_or_create_conversation(user.id)
-                chat_repo = ChatRepository()
-                # 將使用者傳來的訊息存入資料庫
-                chat_repo.add_chat_message({
-                    "conversation_id": conversation_id,
-                    "sender_type": 'user',  # 發送者是使用者
-                    "content": event.message.text,
-                    "metadata": {'line_message_id': event.message.id} # 紀錄 LINE 的訊息 ID
-                })
-
                 # 取得 RabbitMQ 服務
                 rabbitmq_service = get_rabbitmq_service()
                 # 從環境變數讀取任務隊列名稱，預設為 'task_queue'
@@ -146,7 +99,6 @@ class LineService:
         @self.handler.add(MessageEvent, message=AudioMessageContent)
         def handle_audio_message(event: MessageEvent):
             from .user_repository import UserRepository
-            from .chat_repository import ChatRepository
             from .rabbitmq_service import get_rabbitmq_service
             from .minio_service import get_minio_service
             import uuid
@@ -196,21 +148,7 @@ class LineService:
                     metadata=metadata
                 )
 
-                # --- 儲存聊天記錄並發布任務 ---
-                conversation_id = self._get_or_create_conversation(user.id)
-                chat_repo = ChatRepository()
-                chat_repo.add_chat_message({
-                    "conversation_id": conversation_id,
-                    "sender_type": 'user',
-                    "content": f"Audio message: {object_name}",
-                    "metadata": {
-                        'line_message_id': event.message.id,
-                        'minio_object_name': object_name,
-                        'minio_bucket': bucket_name,
-                        'duration_ms': duration_ms # 將時長也存入聊天記錄
-                    }
-                })
-
+                # -- 發布任務 --
                 rabbitmq_service = get_rabbitmq_service()
                 task_queue_name = os.environ.get("RABBITMQ_QUEUE", "task_queue")
 

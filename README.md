@@ -260,3 +260,8 @@ Endpoint URL
 
 Webhook URL
 `https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.ngrok-free.app/api/v1/chat/webhook`
+
+
+```
+1. 前後端分離
+```
