@@ -225,8 +225,8 @@ class AlertCaseManagerTool(BaseTool):
         ts = datetime.now().isoformat(timespec="seconds")
         print(f"[{ts}] 🚨 AlertCaseManagerTool triggered: user={uid}, reason={reason}")
         # 這裡本來有 MQ 發送的註解碼，保留即可
-        # from .rabbitmq_publisher import publish_alert
-        # publish_alert(user_id=uid, reason=reason)
+        from .rabbitmq_publisher import publish_alert
+        publish_alert(user_id=uid, reason=reason)
         return f"⚠️ 已通報個管師使用者ID: {uid}，事由：{reason}"
 
 
