@@ -36,3 +36,11 @@ langchain-openai
 # --- Configuration ---
 python-dotenv
 pydub
+
+# --- Database Drivers ---
+psycopg2-binary
+
+# --- Scheduling & Frameworks ---
+APScheduler
+Flask
+line-bot-sdk
