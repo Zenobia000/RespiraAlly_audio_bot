@@ -2,9 +2,31 @@ import os
 import pika
 import json
 import time
-from llm_app.llm_service import LLMService
+import logging
+from llm_app.llm_service import LLMService, llm_service_instance
+from llm_app.ProactiveCare.scheduler import scheduler, initialize_scheduler
 from stt_app.stt_service import STTService
 from tts_app.tts_service import TTSService
+
+logging.getLogger('apscheduler').setLevel(logging.WARNING)
+
+def initialize_database():
+    """
+    確保所有必要的資料庫和表格都已建立。
+    這個函式可安全地重複執行。
+    """
+    print("--- 開始進行資料庫初始化檢查 ---", flush=True)
+    try:
+        from llm_app.models.chat_profile import create_profile_table_if_not_exists
+        # 呼叫 SQLAlchemy 的 create_all()，它會自動檢查表格是否存在
+        create_profile_table_if_not_exists()
+        print("--- 資料庫初始化檢查完成 ---", flush=True)
+    except ImportError as e:
+        print(f"[!] 初始化錯誤：無法導入模組。請確認路徑設定。 {e}", flush=True)
+    except Exception as e:
+        print(f"[!] 資料庫初始化失敗: {e}", flush=True)
+        print("[!] 可能是資料庫服務尚未完全就緒，稍後重試...", flush=True)
+        raise
 
 def publish_notification(message: dict, patient_id: int):
     """將訊息發佈到通知佇列。"""
@@ -32,7 +54,7 @@ def publish_notification(message: dict, patient_id: int):
 def process_text_task(task_data={}):
     """透過 llm-app 來處理文字訊息。"""
     print("建立 LLM 服務...", flush=True)
-    response = LLMService().generate_response(task_data=task_data)
+    response = llm_service_instance.generate_response(task_data=task_data)
     print(f"成功呼叫 LLM 服務。回應: {response}", flush=True)
     return response
 
@@ -53,7 +75,7 @@ def process_audio_task(patient_id: int, audio_duration_ms=60000, task_data={}):
 
         # 步驟 2: LLM - 產生 AI 回應
         print(f"--- 開始 LLM 處理 ---", flush=True)
-        ai_response = LLMService().generate_response(task_data=task_data)
+        ai_response = llm_service_instance.generate_response(task_data=task_data)
         if not ai_response:
             raise ValueError("LLM 服務未返回有效的 AI 回應")
         print(f"LLM 結果: {ai_response}", flush=True)
@@ -88,6 +110,32 @@ def process_audio_task(patient_id: int, audio_duration_ms=60000, task_data={}):
         raise
 
 if __name__ == '__main__':
+
+    # 帶有重試機制的啟動檢查，確保在 postgres 容器完全就緒後再繼續
+    max_retries = 5
+    retry_delay = 5
+    for i in range(max_retries):
+        try:
+            initialize_database()
+            break # 初始化成功，跳出循環
+        except Exception as e:
+            if i < max_retries - 1:
+                print(f"初始化失敗，將在 {retry_delay} 秒後重試 ({i+1}/{max_retries})...", flush=True)
+                time.sleep(retry_delay)
+            else:
+                print("達到最大重試次數，初始化失敗，程式即將退出。", flush=True)
+                exit(1) # 重試全部失敗後，退出程式
+    
+    # 在背景執行緒中啟動 APScheduler
+    try:
+        # 1. 呼叫初始化函式，將任務新增到排程器中
+        initialize_scheduler()
+        # 2. 啟動排程器
+        scheduler.start()
+        print('✅ [AI Worker] 排程服務已成功啟動。', flush=True)
+    except Exception as e:
+        print(f"❌ [AI Worker] 啟動排程服務失敗: {e}", flush=True)
+
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "rabbitmq")
     task_queue = os.environ.get("RABBITMQ_QUEUE", "task_queue")
 

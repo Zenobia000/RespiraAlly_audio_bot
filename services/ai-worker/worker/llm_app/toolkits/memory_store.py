@@ -4,6 +4,7 @@ import hashlib
 import math
 import os
 import time
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from pymilvus import (
     Collection, CollectionSchema, DataType, FieldSchema, connections, utility
@@ -317,3 +318,51 @@ def gc_expired(user_id: Optional[str] = None, hard_delete: bool = False) -> int:
                 [r["embedding"] for r in full],
             ])
     return len(rows or [])
+
+
+def get_recent_memories(user_id: str, topk: int = 5, days_limit: int = 7) -> str:
+    """
+    主動關懷專用函式。
+    不進行語意搜尋，而是直接獲取指定天數內、最新的 topk 筆記憶。
+    """
+    print(f"🔍 正在為 user_id={user_id} 檢索最近 {days_limit} 天內的記憶...")
+    c = ensure_memory_collection()
+    
+    # 1. 計算時間範圍
+    now_ts_ms = int(time.time() * 1000)
+    start_ts_ms = now_ts_ms - int(timedelta(days=days_limit).total_seconds() * 1000)
+    
+    # 2. 建立查詢表達式
+    expr = f'user_id == "{user_id}" and created_at >= {start_ts_ms} and type == "atom"'
+    
+    try:
+        # 3. 執行查詢
+        # 先取出一個稍大的數量，然後在 Python 中排序
+        results = c.query(
+            expr=expr,
+            output_fields=["text", "created_at"],
+            limit=100 # 取出近期最多100筆以供排序
+        )
+        
+        if not results:
+            print(f"❌ 用戶 {user_id} 在最近 {days_limit} 天內沒有可檢索的記憶。")
+            return ""
+            
+        # 4. 在 Python 端進行排序，並選取 topk
+        # 按照 created_at 降序排列 (最新的在前面)
+        sorted_results = sorted(results, key=lambda r: r['created_at'], reverse=True)
+        top_results = sorted_results[:topk]
+        
+        # 5. 格式化輸出
+        lines = [f'- {item["text"]}' for item in top_results]
+        
+        # 反轉順序，讓最早的記憶在最前面，符合對話時序
+        lines.reverse() 
+        
+        formatted_string = "\n".join(lines)
+        print(f"🧠 為用戶 {user_id} 檢索到 {len(top_results)} 筆近期記憶。")
+        return formatted_string
+        
+    except Exception as e:
+        print(f"[get_recent_memories error] 檢索近期記憶時發生錯誤: {e}")
+        return ""

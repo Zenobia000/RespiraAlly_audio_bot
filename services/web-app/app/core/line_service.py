@@ -90,7 +90,7 @@ class LineService:
                 # 發布一個任務到 RabbitMQ，讓後端 worker 進行非同步處理
                 rabbitmq_service.publish_message(
                     queue_name=task_queue_name,
-                    message_body={'patient_id': user.id, 'text': event.message.text}
+                    message_body={'patient_id': user.id, 'text': event.message.text, 'line_user_id': event.source.user_id}
                 )
             except Exception as e:
                 current_app.logger.error(f"處理使用者 {user.id} 的文字訊息時發生錯誤: {e}", exc_info=True)
@@ -156,7 +156,8 @@ class LineService:
                     'patient_id': user.id,
                     'object_name': object_name,
                     'bucket_name': bucket_name,
-                    'duration_ms': duration_ms # 將時長傳遞給 ai-worker
+                    'duration_ms': duration_ms, # 將時長傳遞給 ai-worker
+                    'line_user_id': event.source.user_id
                 }
                 rabbitmq_service.publish_message(
                     queue_name=task_queue_name,
